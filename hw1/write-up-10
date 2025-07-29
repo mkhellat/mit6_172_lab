@@ -1,0 +1,3 @@
+With -O0 --> Elapsed execution time: 3.760811 sec
+
+With -O3 --> Elapsed execution time: 0.711627 sec

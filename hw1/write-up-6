@@ -1,0 +1,17 @@
+=================================================================
+==8244==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 48 byte(s) in 3 object(s) allocated from:
+    #0 0x5565519fb9b5  (/home/desadm/studies/performance engineering/homeworks/hw1/7775d22df8bc896b87c593f24f7366eb_MIT6_172F18_hw1/matrix-multiply/matrix_multiply+0x1319b5) (BuildId: d6831d37eef27c31e86ab5c4b6a3754cd6a1458e)
+    #1 0x556551a4c9c9  (/home/desadm/studies/performance engineering/homeworks/hw1/7775d22df8bc896b87c593f24f7366eb_MIT6_172F18_hw1/matrix-multiply/matrix_multiply+0x1829c9) (BuildId: d6831d37eef27c31e86ab5c4b6a3754cd6a1458e)
+
+Indirect leak of 192 byte(s) in 12 object(s) allocated from:
+    #0 0x5565519fb9b5  (/home/desadm/studies/performance engineering/homeworks/hw1/7775d22df8bc896b87c593f24f7366eb_MIT6_172F18_hw1/matrix-multiply/matrix_multiply+0x1319b5) (BuildId: d6831d37eef27c31e86ab5c4b6a3754cd6a1458e)
+    #1 0x556551a4ca57  (/home/desadm/studies/performance engineering/homeworks/hw1/7775d22df8bc896b87c593f24f7366eb_MIT6_172F18_hw1/matrix-multiply/matrix_multiply+0x182a57) (BuildId: d6831d37eef27c31e86ab5c4b6a3754cd6a1458e)
+
+Indirect leak of 96 byte(s) in 3 object(s) allocated from:
+    #0 0x5565519fb9b5  (/home/desadm/studies/performance engineering/homeworks/hw1/7775d22df8bc896b87c593f24f7366eb_MIT6_172F18_hw1/matrix-multiply/matrix_multiply+0x1319b5) (BuildId: d6831d37eef27c31e86ab5c4b6a3754cd6a1458e)
+    #1 0x556551a4ca12  (/home/desadm/studies/performance engineering/homeworks/hw1/7775d22df8bc896b87c593f24f7366eb_MIT6_172F18_hw1/matrix-multiply/matrix_multiply+0x182a12) (BuildId: d6831d37eef27c31e86ab5c4b6a3754cd6a1458e)
+
+SUMMARY: AddressSanitizer: 336 byte(s) leaked in 18 allocation(s).
+----------------------------------------------------------------------

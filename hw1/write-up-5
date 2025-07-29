@@ -1,0 +1,7 @@
+rm -f testbed.o matrix_multiply.o matrix_multiply .buildmode \
+        testbed.gcda matrix_multiply.gcda \
+        testbed.gcno matrix_multiply.gcno \
+        testbed.c.gcov matrix_multiply.c.gcov fasttime.h.gcov
+clang -O3 -DNDEBUG -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -c testbed.c -o testbed.o
+clang -O3 -DNDEBUG -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -c matrix_multiply.c -o matrix_multiply.o
+clang -o matrix_multiply testbed.o matrix_multiply.o -lrt -flto -fuse-ld=gold

@@ -1,0 +1,69 @@
+What is the type of argv?
+
+__argv__ is an array of pointers to char variables.
+
+---------------------------------------------------------------------------------
+
+printf("char d = %c\n", d);  // What does this print?
+
+6
+
+---------------------------------------------------------------------------------
+
+// compound types are read right to left in C.
+// pcp is a pointer to a pointer to a char, meaning that
+// pcp stores the address of a char pointer.
+char ** pcp;
+pcp = argv;  // Why is this assignment valid?
+
+Because argv itself is an array of pointers and its first element,
+i.e. itself, is the address of its first element of type char.
+
+---------------------------------------------------------------------------------
+
+char const * pcc2 = c;  // What is the type of pcc2?
+
+it is a pointer to a constant char.
+
+---------------------------------------------------------------------------------
+
+// For each of the following, why is the assignment:
+
+*pcc = '7';  // invalid?
+Yes, because pcc points to constant char and cannot be dereferenced to
+a new value.
+
+pcc = *pcp;  // valid?
+Yes, because pcc is a pointer and can be assigned the value of another
+pointer.
+
+pcc = argv[0];  // valid?
+Yes, the same as before. pcc is a pointer to a constant char, argv[0]
+is also a pointer to a char var and they could have the same value.
+
+---------------------------------------------------------------------------------
+
+char * const cp = c;  // cp is a const pointer to char
+// For each of the following, why is the assignment:
+cp = *pcp;  // invalid?
+because cp is a constant pointer and its value cannot be changed! It
+was already assigned a value.
+
+cp = *argv;  // invalid?
+because cp is a constant pointer and its value cannot be changed!
+
+*cp = '!';  // valid?
+The dereferenced value could be changes as that does not have the
+const-qualifier.
+
+---------------------------------------------------------------------------------
+
+const char * const cpc = c;  // cpc is a const pointer to char const
+// For each of the following, why is the assignment:
+cpc = *pcp;  // invalid?
+cpc = argv[0];  // invalid?
+Both the same as before since it is a constant pointer with already a value.
+
+*cpc = '@';  // invalid?
+as it is a pointer to a constant char (here the value 6) and the
+dereferenced value cannot be changed.
