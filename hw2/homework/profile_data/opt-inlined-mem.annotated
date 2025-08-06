@@ -1,0 +1,606 @@
+ Percent |	Source code & Disassembly of sort for instructions:u (74080 samples, percent: local period)
+-----------------------------------------------------------------------------------------------------------
+         :
+         :
+         :
+         : 3    Disassembly of section .text:
+         :
+         : 5    0000000000002ca0 <sort_i>:
+         :
+         :
+         : 8    // A basic merge sort routine that sorts the subarray A[p..r]
+         : 9    void sort_i(data_t* A, int p, int r) {
+         : 10   assert(A);
+         : 11   if (p < r) {
+    1.51 :   2ca0:   cmp    %edx,%esi
+    0.00 :   2ca2:   jge    2dc8 <sort_i+0x128>
+    0.05 :   2ca8:   push   %rbp
+    0.86 :   2ca9:   push   %r15
+    0.56 :   2cab:   push   %r14
+    0.01 :   2cad:   push   %r13
+    0.07 :   2caf:   push   %r12
+    0.70 :   2cb1:   push   %rbx
+    0.58 :   2cb2:   sub    $0x28,%rsp
+    0.04 :   2cb6:   mov    %edx,%r13d
+    0.96 :   2cb9:   mov    %esi,%r14d
+    0.58 :   2cbc:   mov    %rdi,%rbx
+         : 24   int q = (p + r) / 2;
+    0.00 :   2cbf:   lea    (%r14,%r13,1),%eax
+    0.05 :   2cc3:   mov    %eax,%ebp
+    0.92 :   2cc5:   shr    $0x1f,%ebp
+    0.65 :   2cc8:   add    %eax,%ebp
+    0.01 :   2cca:   sar    $1,%ebp
+         : 30   sort_i(A, p, q);
+    0.03 :   2ccc:   mov    %ebp,%edx
+    0.86 :   2cce:   call   2ca0 <sort_i>
+         : 33   sort_i(A, q + 1, r);
+    0.60 :   2cd3:   lea    0x1(%rbp),%esi
+    0.01 :   2cd6:   mov    %rbx,%rdi
+    0.09 :   2cd9:   mov    %r13d,%edx
+    0.50 :   2cdc:   call   2ca0 <sort_i>
+         : 38   // Uses two arrays 'left' and 'right' in the merge operation.
+         : 39   static void merge_i(data_t* A, int p, int q, int r) {
+         : 40   assert(A);
+         : 41   assert(p <= q);
+         : 42   assert((q + 1) <= r);
+         : 43   int n1 = q - p + 1;
+    0.91 :   2ce1:   mov    %ebp,%r12d
+    0.00 :   2ce4:   mov    %r14,0x10(%rsp)
+    0.43 :   2ce9:   sub    %r14d,%r12d
+         : 47   int n2 = r - q;
+    0.51 :   2cec:   mov    %r13d,%r15d
+    0.52 :   2cef:   sub    %ebp,%r15d
+         : 50   *space = (data_t*)malloc(sizeof(data_t) * size);
+    0.11 :   2cf2:   movslq %r12d,%rax
+    0.33 :   2cf5:   lea    0x8(,%rax,4),%rdi
+    0.45 :   2cfd:   call   1100 <malloc@plt>
+    0.20 :   2d02:   mov    %rax,%r14
+         : 55   if (*space == NULL) {
+    0.35 :   2d05:   test   %rax,%rax
+    0.00 :   2d08:   jne    2d16 <sort_i+0x76>
+         : 58   printf("out of memory...\n");
+    0.00 :   2d0a:   lea    0x62d(%rip),%rdi        # 333e <_IO_stdin_used+0x33e>
+    0.00 :   2d11:   call   1050 <puts@plt>
+    0.94 :   2d16:   mov    %r15d,0xc(%rsp)
+         : 62   *space = (data_t*)malloc(sizeof(data_t) * size);
+    0.00 :   2d1b:   movslq %r15d,%rax
+    0.00 :   2d1e:   mov    %rax,0x20(%rsp)
+    0.28 :   2d23:   lea    0x4(,%rax,4),%rdi
+    0.89 :   2d2b:   call   1100 <malloc@plt>
+    0.21 :   2d30:   mov    %rax,%r15
+         : 68   if (*space == NULL) {
+    0.21 :   2d33:   test   %rax,%rax
+    0.00 :   2d36:   je     2dc9 <sort_i+0x129>
+    0.00 :   2d3c:   test   %r14,%r14
+         :
+         : 73   data_t* left = 0, * right = 0;
+         : 74   inline_mem_alloc(&left, n1 + 1);
+         : 75   inline_mem_alloc(&right, n2 + 1);
+         : 76   if (left == NULL || right == NULL) {
+    0.00 :   2d3f:   je     2e50 <sort_i+0x1b0>
+    0.38 :   2d45:   mov    %r13,0x18(%rsp)
+         : 79   int n1 = q - p + 1;
+    0.17 :   2d4a:   lea    0x1(%r12),%eax
+         : 81   inline_mem_free(&left);
+         : 82   inline_mem_free(&right);
+         : 83   return;
+         : 84   }
+         :
+         : 86   copy_i(&(A[p]), left, n1);
+    0.14 :   2d4f:   movslq 0x10(%rsp),%r13
+         :
+         : 89   static void copy_i(data_t* source, data_t* dest, int n) {
+         : 90   assert(dest);
+         : 91   assert(source);
+         :
+         : 93   for (int i = 0 ; i < n ; i++) {
+    0.00 :   2d54:   test   %r12d,%r12d
+    0.67 :   2d57:   mov    %eax,%r12d
+    0.15 :   2d5a:   js     2d6f <sort_i+0xcf>
+         : 97   copy_i(&(A[p]), left, n1);
+    0.22 :   2d5c:   lea    (%rbx,%r13,4),%rsi
+         : 99   for (int i = 0 ; i < n ; i++) {
+    0.00 :   2d60:   mov    %r12d,%edx
+    1.01 :   2d63:   shl    $0x2,%rdx
+         : 102  dest[i] = source[i];
+    0.24 :   2d67:   mov    %r14,%rdi
+    0.23 :   2d6a:   call   10f0 <memcpy@plt>
+    0.01 :   2d6f:   mov    0xc(%rsp),%ecx
+         : 106  for (int i = 0 ; i < n ; i++) {
+    0.06 :   2d73:   test   %ecx,%ecx
+    0.00 :   2d75:   jle    2d90 <sort_i+0xf0>
+         : 109  copy_i(&(A[q + 1]), right, n2);
+    1.58 :   2d77:   movslq %ebp,%rax
+    0.01 :   2d7a:   lea    (%rbx,%rax,4),%rsi
+    0.00 :   2d7e:   add    $0x4,%rsi
+         : 113  for (int i = 0 ; i < n ; i++) {
+    0.03 :   2d82:   mov    %ecx,%edx
+    1.08 :   2d84:   shl    $0x2,%rdx
+         : 116  dest[i] = source[i];
+    0.01 :   2d88:   mov    %r15,%rdi
+    0.00 :   2d8b:   call   10f0 <memcpy@plt>
+         : 119  left[n1] = UINT_MAX;
+    0.00 :   2d90:   movslq %r12d,%rax
+    0.00 :   2d93:   movl   $0xffffffff,(%r14,%rax,4)
+    0.02 :   2d9b:   mov    0x20(%rsp),%rax
+         : 123  right[n2] = UINT_MAX;
+    0.58 :   2da0:   movl   $0xffffffff,(%r15,%rax,4)
+    0.04 :   2da8:   xor    %eax,%eax
+    0.01 :   2daa:   mov    0x18(%rsp),%rcx
+         : 127  for (int k = p; k <= r; k++) {
+    0.72 :   2daf:   sub    0x10(%rsp),%ecx
+    0.06 :   2db3:   lea    0x1(%rcx),%ecx
+    0.02 :   2db6:   jne    2dd7 <sort_i+0x137>
+    0.00 :   2db8:   xor    %edx,%edx
+    0.00 :   2dba:   test   $0x1,%cl
+    0.00 :   2dbd:   jne    2e3f <sort_i+0x19f>
+    0.00 :   2dc3:   jmp    2e50 <sort_i+0x1b0>
+         : 135  }
+    1.33 :   2dc8:   ret
+         : 137  printf("out of memory...\n");
+    0.00 :   2dc9:   lea    0x56e(%rip),%rdi        # 333e <_IO_stdin_used+0x33e>
+    0.00 :   2dd0:   call   1050 <puts@plt>
+         : 140  if (left == NULL || right == NULL) {
+    0.00 :   2dd5:   jmp    2e50 <sort_i+0x1b0>
+         : 142  for (int k = p; k <= r; k++) {
+    0.01 :   2dd7:   mov    %ecx,%edx
+    1.29 :   2dd9:   and    $0xfffffffe,%edx
+    0.06 :   2ddc:   xor    %esi,%esi
+    0.02 :   2dde:   xchg   %ax,%ax
+         : 147  if (left[i] <= right[j]) {
+    0.74 :   2de0:   mov    %esi,%edi
+    1.69 :   2de2:   mov    (%r14,%rdi,4),%r8d
+   10.01 :   2de6:   mov    %eax,%edi
+    0.14 :   2de8:   mov    (%r15,%rdi,4),%r9d
+    0.59 :   2dec:   xor    %edi,%edi
+    1.22 :   2dee:   xor    %r10d,%r10d
+    1.58 :   2df1:   cmp    %r9d,%r8d
+    0.50 :   2df4:   seta   %dil
+    7.56 :   2df8:   setbe  %r10b
+    2.79 :   2dfc:   cmovb  %r8d,%r9d
+    0.37 :   2e00:   add    %esi,%r10d
+    2.70 :   2e03:   add    %eax,%edi
+    0.43 :   2e05:   mov    %r9d,(%rbx,%r13,4)
+    0.54 :   2e09:   mov    (%r14,%r10,4),%r8d
+   10.66 :   2e0d:   mov    (%r15,%rdi,4),%r9d
+    0.76 :   2e11:   xor    %eax,%eax
+    0.05 :   2e13:   xor    %esi,%esi
+    0.12 :   2e15:   cmp    %r9d,%r8d
+    2.88 :   2e18:   seta   %al
+   13.62 :   2e1b:   setbe  %sil
+    4.29 :   2e1f:   cmovb  %r8d,%r9d
+    1.52 :   2e23:   add    %r10d,%esi
+    1.14 :   2e26:   add    %edi,%eax
+    0.25 :   2e28:   mov    %r9d,0x4(%rbx,%r13,4)
+         : 172  for (int k = p; k <= r; k++) {
+    1.37 :   2e2d:   add    $0x2,%r13
+    0.88 :   2e31:   add    $0xfffffffe,%edx
+    0.00 :   2e34:   jne    2de0 <sort_i+0x140>
+         : 176  if (left[i] <= right[j]) {
+    0.09 :   2e36:   mov    %esi,%edx
+    0.01 :   2e38:   mov    %eax,%eax
+         : 179  for (int k = p; k <= r; k++) {
+    0.37 :   2e3a:   test   $0x1,%cl
+    0.00 :   2e3d:   je     2e50 <sort_i+0x1b0>
+         : 182  if (left[i] <= right[j]) {
+    0.61 :   2e3f:   mov    (%r14,%rdx,4),%ecx
+    0.58 :   2e43:   mov    (%r15,%rax,4),%eax
+    0.14 :   2e47:   cmp    %eax,%ecx
+    0.33 :   2e49:   cmovb  %ecx,%eax
+    0.26 :   2e4c:   mov    %eax,(%rbx,%r13,4)
+         : 188  free(*space);
+    0.77 :   2e50:   mov    %r14,%rdi
+    0.05 :   2e53:   call   1030 <free@plt>
+    0.34 :   2e58:   mov    %r15,%rdi
+    0.01 :   2e5b:   add    $0x28,%rsp
+    0.54 :   2e5f:   pop    %rbx
+    0.41 :   2e60:   pop    %r12
+    0.01 :   2e62:   pop    %r13
+    0.01 :   2e64:   pop    %r14
+    0.55 :   2e66:   pop    %r15
+    0.39 :   2e68:   pop    %rbp
+    0.01 :   2e69:   jmp    1030 <free@plt>
+ Percent |	Source code & Disassembly of sort for cycles:u (88024 samples, percent: local period)
+-----------------------------------------------------------------------------------------------------
+         :
+         :
+         :
+         : 3    Disassembly of section .text:
+         :
+         : 5    0000000000002ca0 <sort_i>:
+         :
+         :
+         : 8    // A basic merge sort routine that sorts the subarray A[p..r]
+         : 9    void sort_i(data_t* A, int p, int r) {
+         : 10   assert(A);
+         : 11   if (p < r) {
+    0.72 :   2ca0:   cmp    %edx,%esi
+    0.00 :   2ca2:   jge    2dc8 <sort_i+0x128>
+    0.02 :   2ca8:   push   %rbp
+    0.40 :   2ca9:   push   %r15
+    0.27 :   2cab:   push   %r14
+    0.00 :   2cad:   push   %r13
+    0.03 :   2caf:   push   %r12
+    0.38 :   2cb1:   push   %rbx
+    0.26 :   2cb2:   sub    $0x28,%rsp
+    0.02 :   2cb6:   mov    %edx,%r13d
+    0.33 :   2cb9:   mov    %esi,%r14d
+    0.29 :   2cbc:   mov    %rdi,%rbx
+         : 24   int q = (p + r) / 2;
+    0.00 :   2cbf:   lea    (%r14,%r13,1),%eax
+    0.01 :   2cc3:   mov    %eax,%ebp
+    0.39 :   2cc5:   shr    $0x1f,%ebp
+    0.26 :   2cc8:   add    %eax,%ebp
+    0.00 :   2cca:   sar    $1,%ebp
+         : 30   sort_i(A, p, q);
+    0.01 :   2ccc:   mov    %ebp,%edx
+    0.36 :   2cce:   call   2ca0 <sort_i>
+         : 33   sort_i(A, q + 1, r);
+    0.38 :   2cd3:   lea    0x1(%rbp),%esi
+    0.01 :   2cd6:   mov    %rbx,%rdi
+    0.04 :   2cd9:   mov    %r13d,%edx
+    0.24 :   2cdc:   call   2ca0 <sort_i>
+         : 38   // Uses two arrays 'left' and 'right' in the merge operation.
+         : 39   static void merge_i(data_t* A, int p, int q, int r) {
+         : 40   assert(A);
+         : 41   assert(p <= q);
+         : 42   assert((q + 1) <= r);
+         : 43   int n1 = q - p + 1;
+    0.53 :   2ce1:   mov    %ebp,%r12d
+    0.00 :   2ce4:   mov    %r14,0x10(%rsp)
+    0.22 :   2ce9:   sub    %r14d,%r12d
+         : 47   int n2 = r - q;
+    0.20 :   2cec:   mov    %r13d,%r15d
+    0.28 :   2cef:   sub    %ebp,%r15d
+         : 50   *space = (data_t*)malloc(sizeof(data_t) * size);
+    0.06 :   2cf2:   movslq %r12d,%rax
+    0.14 :   2cf5:   lea    0x8(,%rax,4),%rdi
+    0.20 :   2cfd:   call   1100 <malloc@plt>
+    0.08 :   2d02:   mov    %rax,%r14
+         : 55   if (*space == NULL) {
+    0.15 :   2d05:   test   %rax,%rax
+    0.00 :   2d08:   jne    2d16 <sort_i+0x76>
+         : 58   printf("out of memory...\n");
+    0.00 :   2d0a:   lea    0x62d(%rip),%rdi        # 333e <_IO_stdin_used+0x33e>
+    0.00 :   2d11:   call   1050 <puts@plt>
+    0.51 :   2d16:   mov    %r15d,0xc(%rsp)
+         : 62   *space = (data_t*)malloc(sizeof(data_t) * size);
+    0.00 :   2d1b:   movslq %r15d,%rax
+    0.00 :   2d1e:   mov    %rax,0x20(%rsp)
+    0.14 :   2d23:   lea    0x4(,%rax,4),%rdi
+    0.51 :   2d2b:   call   1100 <malloc@plt>
+    0.10 :   2d30:   mov    %rax,%r15
+         : 68   if (*space == NULL) {
+    0.09 :   2d33:   test   %rax,%rax
+    0.00 :   2d36:   je     2dc9 <sort_i+0x129>
+    0.00 :   2d3c:   test   %r14,%r14
+         :
+         : 73   data_t* left = 0, * right = 0;
+         : 74   inline_mem_alloc(&left, n1 + 1);
+         : 75   inline_mem_alloc(&right, n2 + 1);
+         : 76   if (left == NULL || right == NULL) {
+    0.00 :   2d3f:   je     2e50 <sort_i+0x1b0>
+    0.45 :   2d45:   mov    %r13,0x18(%rsp)
+         : 79   int n1 = q - p + 1;
+    0.10 :   2d4a:   lea    0x1(%r12),%eax
+         : 81   inline_mem_free(&left);
+         : 82   inline_mem_free(&right);
+         : 83   return;
+         : 84   }
+         :
+         : 86   copy_i(&(A[p]), left, n1);
+    0.09 :   2d4f:   movslq 0x10(%rsp),%r13
+         :
+         : 89   static void copy_i(data_t* source, data_t* dest, int n) {
+         : 90   assert(dest);
+         : 91   assert(source);
+         :
+         : 93   for (int i = 0 ; i < n ; i++) {
+    0.00 :   2d54:   test   %r12d,%r12d
+    0.46 :   2d57:   mov    %eax,%r12d
+    0.11 :   2d5a:   js     2d6f <sort_i+0xcf>
+         : 97   copy_i(&(A[p]), left, n1);
+    0.10 :   2d5c:   lea    (%rbx,%r13,4),%rsi
+         : 99   for (int i = 0 ; i < n ; i++) {
+    0.00 :   2d60:   mov    %r12d,%edx
+    0.49 :   2d63:   shl    $0x2,%rdx
+         : 102  dest[i] = source[i];
+    0.09 :   2d67:   mov    %r14,%rdi
+    0.09 :   2d6a:   call   10f0 <memcpy@plt>
+    0.00 :   2d6f:   mov    0xc(%rsp),%ecx
+         : 106  for (int i = 0 ; i < n ; i++) {
+    0.03 :   2d73:   test   %ecx,%ecx
+    0.00 :   2d75:   jle    2d90 <sort_i+0xf0>
+         : 109  copy_i(&(A[q + 1]), right, n2);
+    0.61 :   2d77:   movslq %ebp,%rax
+    0.00 :   2d7a:   lea    (%rbx,%rax,4),%rsi
+    0.00 :   2d7e:   add    $0x4,%rsi
+         : 113  for (int i = 0 ; i < n ; i++) {
+    0.02 :   2d82:   mov    %ecx,%edx
+    0.63 :   2d84:   shl    $0x2,%rdx
+         : 116  dest[i] = source[i];
+    0.00 :   2d88:   mov    %r15,%rdi
+    0.00 :   2d8b:   call   10f0 <memcpy@plt>
+         : 119  left[n1] = UINT_MAX;
+    0.00 :   2d90:   movslq %r12d,%rax
+    0.00 :   2d93:   movl   $0xffffffff,(%r14,%rax,4)
+    0.02 :   2d9b:   mov    0x20(%rsp),%rax
+         : 123  right[n2] = UINT_MAX;
+    0.63 :   2da0:   movl   $0xffffffff,(%r15,%rax,4)
+    0.03 :   2da8:   xor    %eax,%eax
+    0.01 :   2daa:   mov    0x18(%rsp),%rcx
+         : 127  for (int k = p; k <= r; k++) {
+    0.59 :   2daf:   sub    0x10(%rsp),%ecx
+    0.05 :   2db3:   lea    0x1(%rcx),%ecx
+    0.01 :   2db6:   jne    2dd7 <sort_i+0x137>
+    0.00 :   2db8:   xor    %edx,%edx
+    0.00 :   2dba:   test   $0x1,%cl
+    0.00 :   2dbd:   jne    2e3f <sort_i+0x19f>
+    0.00 :   2dc3:   jmp    2e50 <sort_i+0x1b0>
+         : 135  }
+    0.68 :   2dc8:   ret
+         : 137  printf("out of memory...\n");
+    0.00 :   2dc9:   lea    0x56e(%rip),%rdi        # 333e <_IO_stdin_used+0x33e>
+    0.00 :   2dd0:   call   1050 <puts@plt>
+         : 140  if (left == NULL || right == NULL) {
+    0.00 :   2dd5:   jmp    2e50 <sort_i+0x1b0>
+         : 142  for (int k = p; k <= r; k++) {
+    0.00 :   2dd7:   mov    %ecx,%edx
+    0.65 :   2dd9:   and    $0xfffffffe,%edx
+    0.04 :   2ddc:   xor    %esi,%esi
+    0.01 :   2dde:   xchg   %ax,%ax
+         : 147  if (left[i] <= right[j]) {
+    0.96 :   2de0:   mov    %esi,%edi
+    0.79 :   2de2:   mov    (%r14,%rdi,4),%r8d
+   12.81 :   2de6:   mov    %eax,%edi
+    0.06 :   2de8:   mov    (%r15,%rdi,4),%r9d
+    1.03 :   2dec:   xor    %edi,%edi
+    0.65 :   2dee:   xor    %r10d,%r10d
+    3.01 :   2df1:   cmp    %r9d,%r8d
+    0.76 :   2df4:   seta   %dil
+    9.23 :   2df8:   setbe  %r10b
+    3.95 :   2dfc:   cmovb  %r8d,%r9d
+    0.94 :   2e00:   add    %esi,%r10d
+    6.37 :   2e03:   add    %eax,%edi
+    0.41 :   2e05:   mov    %r9d,(%rbx,%r13,4)
+    0.38 :   2e09:   mov    (%r14,%r10,4),%r8d
+   13.81 :   2e0d:   mov    (%r15,%rdi,4),%r9d
+    1.22 :   2e11:   xor    %eax,%eax
+    0.04 :   2e13:   xor    %esi,%esi
+    0.05 :   2e15:   cmp    %r9d,%r8d
+    3.95 :   2e18:   seta   %al
+    9.98 :   2e1b:   setbe  %sil
+    3.74 :   2e1f:   cmovb  %r8d,%r9d
+    1.62 :   2e23:   add    %r10d,%esi
+    3.02 :   2e26:   add    %edi,%eax
+    0.16 :   2e28:   mov    %r9d,0x4(%rbx,%r13,4)
+         : 172  for (int k = p; k <= r; k++) {
+    2.52 :   2e2d:   add    $0x2,%r13
+    0.56 :   2e31:   add    $0xfffffffe,%edx
+    0.00 :   2e34:   jne    2de0 <sort_i+0x140>
+         : 176  if (left[i] <= right[j]) {
+    0.04 :   2e36:   mov    %esi,%edx
+    0.01 :   2e38:   mov    %eax,%eax
+         : 179  for (int k = p; k <= r; k++) {
+    0.23 :   2e3a:   test   $0x1,%cl
+    0.00 :   2e3d:   je     2e50 <sort_i+0x1b0>
+         : 182  if (left[i] <= right[j]) {
+    0.31 :   2e3f:   mov    (%r14,%rdx,4),%ecx
+    0.55 :   2e43:   mov    (%r15,%rax,4),%eax
+    0.23 :   2e47:   cmp    %eax,%ecx
+    0.30 :   2e49:   cmovb  %ecx,%eax
+    0.28 :   2e4c:   mov    %eax,(%rbx,%r13,4)
+         : 188  free(*space);
+    0.81 :   2e50:   mov    %r14,%rdi
+    0.02 :   2e53:   call   1030 <free@plt>
+    0.31 :   2e58:   mov    %r15,%rdi
+    0.00 :   2e5b:   add    $0x28,%rsp
+    0.30 :   2e5f:   pop    %rbx
+    0.33 :   2e60:   pop    %r12
+    0.01 :   2e62:   pop    %r13
+    0.00 :   2e64:   pop    %r14
+    0.27 :   2e66:   pop    %r15
+    0.34 :   2e68:   pop    %rbp
+    0.01 :   2e69:   jmp    1030 <free@plt>
+ Percent |	Source code & Disassembly of sort for cache-misses:u (2434 samples, percent: local period)
+----------------------------------------------------------------------------------------------------------
+         :
+         :
+         :
+         : 3    Disassembly of section .text:
+         :
+         : 5    0000000000002ca0 <sort_i>:
+         :
+         :
+         : 8    // A basic merge sort routine that sorts the subarray A[p..r]
+         : 9    void sort_i(data_t* A, int p, int r) {
+         : 10   assert(A);
+         : 11   if (p < r) {
+    1.03 :   2ca0:   cmp    %edx,%esi
+    0.00 :   2ca2:   jge    2dc8 <sort_i+0x128>
+    0.22 :   2ca8:   push   %rbp
+    1.37 :   2ca9:   push   %r15
+    0.50 :   2cab:   push   %r14
+    0.37 :   2cad:   push   %r13
+    0.00 :   2caf:   push   %r12
+    0.13 :   2cb1:   push   %rbx
+    0.15 :   2cb2:   sub    $0x28,%rsp
+    0.00 :   2cb6:   mov    %edx,%r13d
+    0.10 :   2cb9:   mov    %esi,%r14d
+    0.60 :   2cbc:   mov    %rdi,%rbx
+         : 24   int q = (p + r) / 2;
+    0.10 :   2cbf:   lea    (%r14,%r13,1),%eax
+    0.46 :   2cc3:   mov    %eax,%ebp
+    0.13 :   2cc5:   shr    $0x1f,%ebp
+    0.43 :   2cc8:   add    %eax,%ebp
+    0.17 :   2cca:   sar    $1,%ebp
+         : 30   sort_i(A, p, q);
+    0.00 :   2ccc:   mov    %ebp,%edx
+    0.78 :   2cce:   call   2ca0 <sort_i>
+         : 33   sort_i(A, q + 1, r);
+    0.51 :   2cd3:   lea    0x1(%rbp),%esi
+    0.00 :   2cd6:   mov    %rbx,%rdi
+    0.04 :   2cd9:   mov    %r13d,%edx
+    0.06 :   2cdc:   call   2ca0 <sort_i>
+         : 38   // Uses two arrays 'left' and 'right' in the merge operation.
+         : 39   static void merge_i(data_t* A, int p, int q, int r) {
+         : 40   assert(A);
+         : 41   assert(p <= q);
+         : 42   assert((q + 1) <= r);
+         : 43   int n1 = q - p + 1;
+    1.81 :   2ce1:   mov    %ebp,%r12d
+    0.04 :   2ce4:   mov    %r14,0x10(%rsp)
+    0.16 :   2ce9:   sub    %r14d,%r12d
+         : 47   int n2 = r - q;
+    0.06 :   2cec:   mov    %r13d,%r15d
+    0.12 :   2cef:   sub    %ebp,%r15d
+         : 50   *space = (data_t*)malloc(sizeof(data_t) * size);
+    0.00 :   2cf2:   movslq %r12d,%rax
+    0.09 :   2cf5:   lea    0x8(,%rax,4),%rdi
+    0.55 :   2cfd:   call   1100 <malloc@plt>
+    0.14 :   2d02:   mov    %rax,%r14
+         : 55   if (*space == NULL) {
+    0.05 :   2d05:   test   %rax,%rax
+    0.00 :   2d08:   jne    2d16 <sort_i+0x76>
+         : 58   printf("out of memory...\n");
+    0.00 :   2d0a:   lea    0x62d(%rip),%rdi        # 333e <_IO_stdin_used+0x33e>
+    0.00 :   2d11:   call   1050 <puts@plt>
+    1.26 :   2d16:   mov    %r15d,0xc(%rsp)
+         : 62   *space = (data_t*)malloc(sizeof(data_t) * size);
+    0.00 :   2d1b:   movslq %r15d,%rax
+    0.00 :   2d1e:   mov    %rax,0x20(%rsp)
+    0.12 :   2d23:   lea    0x4(,%rax,4),%rdi
+    0.14 :   2d2b:   call   1100 <malloc@plt>
+    0.00 :   2d30:   mov    %rax,%r15
+         : 68   if (*space == NULL) {
+    0.04 :   2d33:   test   %rax,%rax
+    0.00 :   2d36:   je     2dc9 <sort_i+0x129>
+    0.00 :   2d3c:   test   %r14,%r14
+         :
+         : 73   data_t* left = 0, * right = 0;
+         : 74   inline_mem_alloc(&left, n1 + 1);
+         : 75   inline_mem_alloc(&right, n2 + 1);
+         : 76   if (left == NULL || right == NULL) {
+    0.00 :   2d3f:   je     2e50 <sort_i+0x1b0>
+    2.47 :   2d45:   mov    %r13,0x18(%rsp)
+         : 79   int n1 = q - p + 1;
+    0.26 :   2d4a:   lea    0x1(%r12),%eax
+         : 81   inline_mem_free(&left);
+         : 82   inline_mem_free(&right);
+         : 83   return;
+         : 84   }
+         :
+         : 86   copy_i(&(A[p]), left, n1);
+    0.06 :   2d4f:   movslq 0x10(%rsp),%r13
+         :
+         : 89   static void copy_i(data_t* source, data_t* dest, int n) {
+         : 90   assert(dest);
+         : 91   assert(source);
+         :
+         : 93   for (int i = 0 ; i < n ; i++) {
+    0.00 :   2d54:   test   %r12d,%r12d
+    0.19 :   2d57:   mov    %eax,%r12d
+    0.00 :   2d5a:   js     2d6f <sort_i+0xcf>
+         : 97   copy_i(&(A[p]), left, n1);
+    0.08 :   2d5c:   lea    (%rbx,%r13,4),%rsi
+         : 99   for (int i = 0 ; i < n ; i++) {
+    0.00 :   2d60:   mov    %r12d,%edx
+    0.13 :   2d63:   shl    $0x2,%rdx
+         : 102  dest[i] = source[i];
+    0.02 :   2d67:   mov    %r14,%rdi
+    0.01 :   2d6a:   call   10f0 <memcpy@plt>
+    0.11 :   2d6f:   mov    0xc(%rsp),%ecx
+         : 106  for (int i = 0 ; i < n ; i++) {
+    0.00 :   2d73:   test   %ecx,%ecx
+    0.00 :   2d75:   jle    2d90 <sort_i+0xf0>
+         : 109  copy_i(&(A[q + 1]), right, n2);
+    0.52 :   2d77:   movslq %ebp,%rax
+    0.01 :   2d7a:   lea    (%rbx,%rax,4),%rsi
+    0.00 :   2d7e:   add    $0x4,%rsi
+         : 113  for (int i = 0 ; i < n ; i++) {
+    0.00 :   2d82:   mov    %ecx,%edx
+    1.13 :   2d84:   shl    $0x2,%rdx
+         : 116  dest[i] = source[i];
+    0.22 :   2d88:   mov    %r15,%rdi
+    0.00 :   2d8b:   call   10f0 <memcpy@plt>
+         : 119  left[n1] = UINT_MAX;
+    0.02 :   2d90:   movslq %r12d,%rax
+    0.15 :   2d93:   movl   $0xffffffff,(%r14,%rax,4)
+    0.19 :   2d9b:   mov    0x20(%rsp),%rax
+         : 123  right[n2] = UINT_MAX;
+    0.19 :   2da0:   movl   $0xffffffff,(%r15,%rax,4)
+    0.08 :   2da8:   xor    %eax,%eax
+    0.00 :   2daa:   mov    0x18(%rsp),%rcx
+         : 127  for (int k = p; k <= r; k++) {
+    0.10 :   2daf:   sub    0x10(%rsp),%ecx
+    0.02 :   2db3:   lea    0x1(%rcx),%ecx
+    0.14 :   2db6:   jne    2dd7 <sort_i+0x137>
+    0.00 :   2db8:   xor    %edx,%edx
+    0.00 :   2dba:   test   $0x1,%cl
+    0.00 :   2dbd:   jne    2e3f <sort_i+0x19f>
+    0.00 :   2dc3:   jmp    2e50 <sort_i+0x1b0>
+         : 135  }
+    2.45 :   2dc8:   ret
+         : 137  printf("out of memory...\n");
+    0.00 :   2dc9:   lea    0x56e(%rip),%rdi        # 333e <_IO_stdin_used+0x33e>
+    0.00 :   2dd0:   call   1050 <puts@plt>
+         : 140  if (left == NULL || right == NULL) {
+    0.00 :   2dd5:   jmp    2e50 <sort_i+0x1b0>
+         : 142  for (int k = p; k <= r; k++) {
+    0.00 :   2dd7:   mov    %ecx,%edx
+    0.25 :   2dd9:   and    $0xfffffffe,%edx
+    0.07 :   2ddc:   xor    %esi,%esi
+    0.01 :   2dde:   xchg   %ax,%ax
+         : 147  if (left[i] <= right[j]) {
+    1.29 :   2de0:   mov    %esi,%edi
+    0.31 :   2de2:   mov    (%r14,%rdi,4),%r8d
+   13.66 :   2de6:   mov    %eax,%edi
+    0.02 :   2de8:   mov    (%r15,%rdi,4),%r9d
+    0.64 :   2dec:   xor    %edi,%edi
+    0.47 :   2dee:   xor    %r10d,%r10d
+    1.80 :   2df1:   cmp    %r9d,%r8d
+    0.67 :   2df4:   seta   %dil
+    8.07 :   2df8:   setbe  %r10b
+    3.31 :   2dfc:   cmovb  %r8d,%r9d
+    0.80 :   2e00:   add    %esi,%r10d
+    6.93 :   2e03:   add    %eax,%edi
+    0.26 :   2e05:   mov    %r9d,(%rbx,%r13,4)
+    0.95 :   2e09:   mov    (%r14,%r10,4),%r8d
+   11.11 :   2e0d:   mov    (%r15,%rdi,4),%r9d
+    2.36 :   2e11:   xor    %eax,%eax
+    0.12 :   2e13:   xor    %esi,%esi
+    0.00 :   2e15:   cmp    %r9d,%r8d
+    5.76 :   2e18:   seta   %al
+    7.99 :   2e1b:   setbe  %sil
+    2.72 :   2e1f:   cmovb  %r8d,%r9d
+    1.72 :   2e23:   add    %r10d,%esi
+    3.55 :   2e26:   add    %edi,%eax
+    0.05 :   2e28:   mov    %r9d,0x4(%rbx,%r13,4)
+         : 172  for (int k = p; k <= r; k++) {
+    1.44 :   2e2d:   add    $0x2,%r13
+    0.52 :   2e31:   add    $0xfffffffe,%edx
+    0.00 :   2e34:   jne    2de0 <sort_i+0x140>
+         : 176  if (left[i] <= right[j]) {
+    0.00 :   2e36:   mov    %esi,%edx
+    0.00 :   2e38:   mov    %eax,%eax
+         : 179  for (int k = p; k <= r; k++) {
+    0.28 :   2e3a:   test   $0x1,%cl
+    0.00 :   2e3d:   je     2e50 <sort_i+0x1b0>
+         : 182  if (left[i] <= right[j]) {
+    0.06 :   2e3f:   mov    (%r14,%rdx,4),%ecx
+    0.05 :   2e43:   mov    (%r15,%rax,4),%eax
+    0.09 :   2e47:   cmp    %eax,%ecx
+    0.22 :   2e49:   cmovb  %ecx,%eax
+    0.03 :   2e4c:   mov    %eax,(%rbx,%r13,4)
+         : 188  free(*space);
+    0.52 :   2e50:   mov    %r14,%rdi
+    0.00 :   2e53:   call   1030 <free@plt>
+    0.51 :   2e58:   mov    %r15,%rdi
+    0.01 :   2e5b:   add    $0x28,%rsp
+    0.30 :   2e5f:   pop    %rbx
+    0.15 :   2e60:   pop    %r12
+    0.05 :   2e62:   pop    %r13
+    0.01 :   2e64:   pop    %r14
+    0.39 :   2e66:   pop    %r15
+    0.18 :   2e68:   pop    %rbp
+    0.00 :   2e69:   jmp    1030 <free@plt>
