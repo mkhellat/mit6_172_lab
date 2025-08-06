@@ -21,18 +21,22 @@
  **/
 
 
+#include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include "./util.h"
 
 // Function prototypes
 static void merge_i(data_t* A, int p, int q, int r);
 static void copy_i(data_t* source, data_t* dest, int n);
+
+// Inline mem_alloc and mem_free definitions
 static inline void inline_mem_alloc(data_t** space, int size) {
   *space = (data_t*)malloc(sizeof(data_t) * size);
   if (*space == NULL) {
     printf("out of memory...\n");
   }
 }
-
 static inline void inline_mem_free(data_t** space) {
   free(*space);
   *space = 0;
@@ -40,15 +44,65 @@ static inline void inline_mem_free(data_t** space) {
 
 
 
-// A basic merge sort routine that sorts the subarray A[p..r]
+// Frame structure to simulate recursion
+typedef struct {
+    int p;          // Left index
+    int r;          // Right index
+    int q;          // Midpoint (computed once)
+    char state;     // 0: need left sort, 1: left done, 2: both done
+} Frame;
+
 void sort_i(data_t* A, int p, int r) {
-  assert(A);
-  if (p < r) {
-    int q = (p + r) / 2;
-    sort_i(A, p, q);
-    sort_i(A, q + 1, r);
-    merge_i(A, p, q, r);
-  }
+    assert(A);
+    if (p >= r) return;  // Base case handling
+
+    // Conservative stack depth (64 handles 2^64 elements)
+    #define MAX_DEPTH 64
+    Frame stack[MAX_DEPTH];
+    int top = 0;
+
+    // Initial frame (entire array)
+    stack[top++] = (Frame){p, r, 0, 0};
+
+    while (top > 0) {
+        Frame* f = &stack[top - 1];  // Current frame
+
+        switch (f->state) {
+            case 0:  // Need to sort left half
+                if (f->p >= f->r) {
+                    top--;  // Pop trivial segments
+                    break;
+                }
+                
+                // Compute and store midpoint
+                f->q = (f->p + f->r) / 2;
+                
+                // Push left half (preserves original order)
+                if (top >= MAX_DEPTH) {
+                    fprintf(stderr, "Stack overflow in sort_i\n");
+                    exit(EXIT_FAILURE);
+                }
+                stack[top++] = (Frame){f->p, f->q, 0, 0};
+                f->state = 1;  // Next: sort right half
+                break;
+                
+            case 1:  // Left sorted, need to sort right
+                // Push right half
+                if (top >= MAX_DEPTH) {
+                    fprintf(stderr, "Stack overflow in sort_i\n");
+                    exit(EXIT_FAILURE);
+                }
+                stack[top++] = (Frame){f->q + 1, f->r, 0, 0};
+                f->state = 2;  // Next: merge
+                break;
+                
+            case 2:  // Both halves sorted, merge
+                merge_i(A, f->p, f->q, f->r);
+                top--;  // Pop completed frame
+                break;
+        }
+    }
+    #undef MAX_DEPTH
 }
 
 // A merge routine. Merges the sub-arrays A [p..q] and A [q + 1..r].
