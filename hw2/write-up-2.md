@@ -1,5 +1,11 @@
 # Inlined Sorting Routines
 
+> "The optimal inlining strategy is like seasoning - just enough 
+enhances performance, but too much bloats the code." - Linux Kernel 
+Optimization Guide
+
+----
+
 In order to have a meaningful comparison of `elapsed execution time`,
 as calculated by the program, one needs to revise the `test.c` to make
 sure _standard errors_ are calculated when repeating execution of the
