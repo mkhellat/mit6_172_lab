@@ -42,67 +42,22 @@ static inline void inline_mem_free(data_t** space) {
   *space = 0;
 }
 
-
-
-// Frame structure to simulate recursion
-typedef struct {
-    int p;          // Left index
-    int r;          // Right index
-    int q;          // Midpoint (computed once)
-    char state;     // 0: need left sort, 1: left done, 2: both done
-} Frame;
-
 void sort_i(data_t* A, int p, int r) {
-    assert(A);
-    if (p >= r) return;  // Base case handling
+  assert(A);
+  const int n = r - p + 1;
+  if (n <= 1) return;  // Already sorted
 
-    // Conservative stack depth (64 handles 2^64 elements)
-    #define MAX_DEPTH 64
-    Frame stack[MAX_DEPTH];
-    int top = 0;
-
-    // Initial frame (entire array)
-    stack[top++] = (Frame){p, r, 0, 0};
-
-    while (top > 0) {
-        Frame* f = &stack[top - 1];  // Current frame
-
-        switch (f->state) {
-            case 0:  // Need to sort left half
-                if (f->p >= f->r) {
-                    top--;  // Pop trivial segments
-                    break;
-                }
-                
-                // Compute and store midpoint
-                f->q = (f->p + f->r) / 2;
-                
-                // Push left half (preserves original order)
-                if (top >= MAX_DEPTH) {
-                    fprintf(stderr, "Stack overflow in sort_i\n");
-                    exit(EXIT_FAILURE);
-                }
-                stack[top++] = (Frame){f->p, f->q, 0, 0};
-                f->state = 1;  // Next: sort right half
-                break;
-                
-            case 1:  // Left sorted, need to sort right
-                // Push right half
-                if (top >= MAX_DEPTH) {
-                    fprintf(stderr, "Stack overflow in sort_i\n");
-                    exit(EXIT_FAILURE);
-                }
-                stack[top++] = (Frame){f->q + 1, f->r, 0, 0};
-                f->state = 2;  // Next: merge
-                break;
-                
-            case 2:  // Both halves sorted, merge
-                merge_i(A, f->p, f->q, f->r);
-                top--;  // Pop completed frame
-                break;
-        }
+  // Bottom-up iterative merge sort
+  for (int width = 1; width < n; width *= 2) {
+    for (int i = p; i <= r - width; i += 2 * width) {
+      int left_end = i + width - 1;
+      int right_end = i + 2 * width - 1;
+      if (right_end > r) {
+	right_end = r;
+      }
+      merge_i(A, i, left_end, right_end);
     }
-    #undef MAX_DEPTH
+  }
 }
 
 // A merge routine. Merges the sub-arrays A [p..q] and A [q + 1..r].
@@ -153,4 +108,3 @@ static void copy_i(data_t* source, data_t* dest, int n) {
     dest[i] = source[i];
   }
 }
-
