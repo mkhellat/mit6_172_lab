@@ -395,32 +395,35 @@ Taking a first look at the cachegrind summary :
 
 ```
 
-Branch mispredictions could be the root cause. Following is a detailed
-review of the annotated diff.
+Branch mispredictions seems to be the bottleneck with the root cause
+being a considerable growth in branch predictions in
+general. Following is a detailed review of the annotated diff.
 
 
 #### **Key Metrics**
 
 | Metric | Full Name | Value | Interpretation |
 |--------|-----------|-------|----------------|
-| **Ir** | Instruction Reads | 122,725,784 | Total instructions executed |
-| **Bc** | Branch Instructions | 31,999,986 | Total conditional branches executed |
-| **Bcm** | Branch Mispredictions | 4,033,473 | Branches mispredicted by CPU |
-| **Bi** | Indirect Branches | 0 | Not relevant here |
-| **Bim** | Indirect Branch Mispredictions | 0 | Not relevant here |
+| **$\Delta$Ir**  | Instruction Reads     | 122,725,770 | Difference in total instructions executed |
+| **$\Delta$Bc**  | Branch Instructions   | 31,999,982 | Difference in total conditional branches executed |
+| **$\Delta$Bcm** | Branch Mispredictions | 4,033,456 | Difference in branches mispredicted by CPU |
+| **$\Delta$Bi**  | Indirect Branches     | 0 | Not relevant here |
+| **$\Delta$Bim** | Indirect Branch Mispredictions | 0 | Not relevant here |
 
 
 #### **Critical Observations**
 
-1. **High Branch Misprediction Rate**  
-   - **Bcm/Bc = 4,033,473 / 31,999,986 ≈ 12.6%**  
-   - *Interpretation*: The iterative version suffers 12.6% branch
-      mispredictions vs typically <2% in recursive merge sort.
+1. **High Branch Misprediction Growth Rate**  
+   - **$\Delta$Bcm/$\Delta$Bc = 4,033,456 / 31,999,982 ≈ 12.6%**
+   - *Interpretation*: The iterative version suffers 3.4% (3.7%
+      conditional) branch mispredictions vs 2.8% (3.0% conditional) in
+      recursive merge sort. This 0.6% increase is for a branch
+      prediction growth of ~7.4%.
    - *Cause*: State machine switches (`switch` or `if`-ladder) in the
       iterative implementation create hard-to-predict branches.
 
 2. **Instruction Overhead**  
-   - **Ir = 122,725,784** is significantly higher than expected for
+   - **$\Delta$Ir = 122,725,784** is significantly higher than expected for
        sorting 1M elements.
    - *Cause*: Explicit stack management in the iterative version adds
       redundant instructions for:
