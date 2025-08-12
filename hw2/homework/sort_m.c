@@ -20,10 +20,96 @@
  * IN THE SOFTWARE.
  **/
 
-
+#include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include "./util.h"
+#include "./isort.h"
 
-void sort_m(data_t* A, int p, int r) {
-  printf("Unimplemented!\n");
+// Coarsening threshold (experimentally optimized)
+#define THRESHOLD 64
+
+// Function prototypes
+static void merge_m(data_t* A, int p, int q, int r);
+static void copy_m(data_t* source, data_t* dest, int n);
+
+// Inline memory management
+static inline void inline_mem_alloc(data_t** space, int size) {
+  *space = (data_t*)malloc(sizeof(data_t) * size);
+  if (*space == NULL) {
+    printf("out of memory...\n");
+    exit(EXIT_FAILURE);
+  }
+}
+static inline void inline_mem_free(data_t** space) {
+  free(*space);
+  *space = NULL;
 }
 
+// Coarsened sort by a combination of isort for small blocks and
+// bottom-up merge sort for larger blocks.
+void sort_m(data_t* A, int p, int r) {
+  assert(A);
+  const int n = r - p + 1;
+  
+  // Step 1: Sort ALL blocks of size <= THRESHOLD
+  for (int i = p; i <= r; i += THRESHOLD) {
+    int block_end = i + THRESHOLD - 1;
+    if (block_end > r) block_end = r;  // Handle last partial block
+    isort(A + i, A + block_end + 1);   // Sort block [i, block_end]
+  }
+
+  // Step 2: Bottom-up merge for larger blocks
+  for (int width = THRESHOLD; width < n; width *= 2) {
+    for (int i = p; i <= r - width; i += 2 * width) {
+      int left_end = i + width - 1;
+      int right_end = i + 2 * width - 1;
+      if (right_end > r) right_end = r;
+      merge_m(A, i, left_end, right_end);
+    }
+  }
+}
+
+static void merge_m(data_t* A, int p, int q, int r) {
+  assert(A && p <= q && (q + 1) <= r);
+  //const int n1 = q - p + 1;
+  const int n2 = r - q;
+
+  data_t *temp = NULL;
+  inline_mem_alloc(&temp, n2);  // Allocate temp for right part only
+
+  // Copy right part (A[q+1..r]) to temp
+  copy_m(A + q + 1, temp, n2);
+
+  int i = q;      // Index in left part (A), starts at end
+  int j = n2 - 1; // Index in temp (right part), starts at end
+  int k = r;      // Current position to write in A, starts at end
+
+  // Merge left (in A) and right (in temp) backwards
+  while (i >= p && j >= 0) {
+    if (A[i] > temp[j]) {
+      A[k] = A[i];
+      i--;
+    } else {
+      A[k] = temp[j];
+      j--;
+    }
+    k--;
+  }
+
+  // Copy remaining right elements (if any)
+  while (j >= 0) {
+    A[k] = temp[j];
+    j--;
+    k--;
+  }
+
+  inline_mem_free(&temp);
+}
+
+static void copy_m(data_t* source, data_t* dest, int n) {
+  assert(source && dest);
+  for (int i = 0; i < n; i++) {
+    *(dest + i) = *(source + i);
+  }
+}
