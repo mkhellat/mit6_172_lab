@@ -100,3 +100,29 @@ The combined effect of reduced instructions and improved branch
 prediction (69% fewer mispredictions) enables significantly better
 pipeline utilization. In other words, compiler optimizations both
 reduce work and improve CPU utilization efficiency.
+
+---
+
+Following are a series of steps to optimize the performamce of the
+recusrive merge sort routine by **reducing instruction count**,
+**improving branch prediction**, and **optimizing memory management**:
+
+- [Merge Sort - Recursive - Inline External Function Calls](write-up-2.md)
+  - execution time comparison and profiling
+  - inlining memory management to remove relevant function call
+    overheads
+- [Merge Sort - Iterative - Explicit Stack](write-up-3-1.md)
+  - inlining recusrive calls through an explicit stack and a state
+    machine which tracks resucrsion progress
+- [Merge Sort - Iterative - Bottom UP](write-up-3-2.md)
+  - eliminating state machine to improve branch prediction
+- [Merge Sort - Pointers vs Arrays](write-up-4.md)
+  - eliminating array indexting overhead
+- [Merge Sort - Coarsening with Insert Sort](write-up-5.md)
+  - improving performance by balancing the strengths of insertion sort
+    (for small inputs) and merge sort (for large scales)
+- [Merge Sort - Memory Scratch Space Reduction](write-up-6.md)
+  - making merge use a single temporary scratch space
+- [Merge Sort - Memory Allocation Reduction](write-up-7.md)
+  - eliminating repeated memory allocation/deallocation in the merge
+    function
