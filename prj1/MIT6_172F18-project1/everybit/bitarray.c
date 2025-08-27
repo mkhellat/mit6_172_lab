@@ -65,6 +65,13 @@ static void bitarray_rotate_left(bitarray_t* const bitarray,
                                  const size_t bit_length,
                                  const size_t bit_left_amount);
 
+// Reverse an array.
+//
+// Rev(A) = {A[n] A[n-1] ... A[0]}
+static void bitarray_reverse (bitarray_t* const bitarray,
+			      const size_t begin,
+			      const size_t end);
+  
 // Rotates a subarray left by one bit.
 //
 // bit_offset is the index of the start of the subarray
@@ -201,11 +208,33 @@ static void bitarray_rotate_left(bitarray_t* const bitarray,
                                  const size_t bit_offset,
                                  const size_t bit_length,
                                  const size_t bit_left_amount) {
-  for (size_t i = 0; i < bit_left_amount; i++) {
-    bitarray_rotate_left_one(bitarray, bit_offset, bit_length);
+  // Triple Reverse Method
+  size_t k = bit_left_amount % bit_length;
+  if (k == 0) return;
+  // BA = rev(rev(BA)) = rev(rev(A) rev(B))
+  bitarray_reverse (bitarray, bit_offset,
+		              bit_offset + k - 1);
+  bitarray_reverse (bitarray, bit_offset + k,
+		              bit_offset + bit_length - 1);
+  bitarray_reverse (bitarray, bit_offset,
+		              bit_offset + bit_length - 1);
+}
+
+// Reverse a bitarray
+static void bitarray_reverse (bitarray_t* const bitarray,
+			      size_t begin,
+			      size_t end) {
+  bool temp;
+  while (begin < end) {
+    temp = bitarray_get(bitarray, begin);
+    bitarray_set(bitarray, begin, bitarray_get(bitarray, end));
+    bitarray_set(bitarray, end, temp);
+    begin++;
+    end--;
   }
 }
 
+// Naive rotation: rotate left by 1 bit for a small bitarray
 static void bitarray_rotate_left_one(bitarray_t* const bitarray,
                                      const size_t bit_offset,
                                      const size_t bit_length) {
