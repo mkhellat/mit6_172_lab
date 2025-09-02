@@ -30,8 +30,24 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include <sys/types.h>
+
+
+// ******************************** Macros **********************************
+
+//  Generate bit reversal table using recursive macros; Copied from
+//  Bit Twiddling Hacks.
+static const uint8_t bit_reverse_table256[256] = {
+#define R2(n) n, n + 2*64, n + 1*64, n + 3*64
+#define R4(n) R2(n), R2(n + 2*16), R2(n + 1*16), R2(n + 3*16)
+#define R6(n) R4(n), R4(n + 2*4), R4(n + 1*4), R4(n + 3*4)
+    R6(0), R6(2), R6(1), R6(3)
+#undef R2
+#undef R4
+#undef R6
+};
 
 
 // ********************************* Types **********************************
@@ -65,18 +81,40 @@ static void bitarray_rotate_left(bitarray_t* const bitarray,
                                  const size_t bit_length,
                                  const size_t bit_left_amount);
 
-// Reverse an array.
+// Reverse a bitarray in-place.
 //
 // Rev(A) = {A[n] A[n-1] ... A[0]}
-static void bitarray_reverse (bitarray_t* const bitarray,
-			      const size_t begin,
-			      const size_t end);
-  
+//
+// Swap bits starting from LSB and MSB moving inwards towards the
+// center of the array.
+static inline void bitarray_reverse_naive(bitarray_t* const bitarray,
+					  size_t start_idx,
+					  size_t end);
+
+// Reverse a subarray within a bitarray using LUT optimization
+//
+// start_idx Starting bit index of subarray to reverse
+// end Ending bit index of subarray to reverse (inclusive)
+// 
+// This function reverses a contiguous subarray of bits within a
+// bitarray using a combination of bit-level and byte-level operations
+// for optimal performance. The algorithm:
+// 1. Handles partial bytes at subarray boundaries with bit-level
+// operations
+// 2. Uses LUT-based byte reversal for complete bytes in the middle
+// section
+// 3. Maintains the original bitarray structure outside the subarray
+// 
+// Performance: O(n) time complexity with optimized byte operations
+static inline void bitarray_reverse_lut(bitarray_t* const bitarray,
+					const size_t start_idx,
+					const size_t end_idx);
+
 // Rotates a subarray left by one bit.
 //
 // bit_offset is the index of the start of the subarray
 // bit_length is the length of the subarray, in bits
-//
+//g
 // The subarray spans the half-open interval
 // [bit_offset, bit_offset + bit_length)
 // That is, the start is inclusive, but the end is exclusive.
@@ -117,7 +155,12 @@ static char bitmask(const size_t bit_index);
 
 // ******************************* Functions ********************************
 
-bitarray_t* bitarray_new(const size_t bit_sz) {
+/* --------------------------------------------------------------------------
+ * bitarray_new
+ */
+bitarray_t*
+bitarray_new(const size_t bit_sz)
+{
   // Allocate an underlying buffer of ceil(bit_sz/8) bytes.
   char* const buf = calloc(1, (bit_sz+7) / 8);
   if (buf == NULL) {
@@ -135,8 +178,12 @@ bitarray_t* bitarray_new(const size_t bit_sz) {
   bitarray->bit_sz = bit_sz;
   return bitarray;
 }
-
-void bitarray_free(bitarray_t* const bitarray) {
+/* --------------------------------------------------------------------------
+ * bitarray_free
+ */
+void
+bitarray_free(bitarray_t* const bitarray)
+{
   if (bitarray == NULL) {
     return;
   }
@@ -144,12 +191,20 @@ void bitarray_free(bitarray_t* const bitarray) {
   bitarray->buf = NULL;
   free(bitarray);
 }
-
-size_t bitarray_get_bit_sz(const bitarray_t* const bitarray) {
+/* --------------------------------------------------------------------------
+ * bitarray_get_bit_sz
+ */
+size_t
+bitarray_get_bit_sz(const bitarray_t* const bitarray)
+{
   return bitarray->bit_sz;
 }
-
-bool bitarray_get(const bitarray_t* const bitarray, const size_t bit_index) {
+/* --------------------------------------------------------------------------
+ * bitarray_get
+ */
+bool
+bitarray_get(const bitarray_t* const bitarray, const size_t bit_index)
+{
   assert(bit_index < bitarray->bit_sz);
 
   // We're storing bits in packed form, 8 per byte.  So to get the nth
@@ -163,10 +218,14 @@ bool bitarray_get(const bitarray_t* const bitarray, const size_t bit_index) {
   return (bitarray->buf[bit_index / 8] & bitmask(bit_index)) ?
          true : false;
 }
-
-void bitarray_set(bitarray_t* const bitarray,
-                  const size_t bit_index,
-                  const bool value) {
+/* --------------------------------------------------------------------------
+ * bitarray_set
+ */
+void
+bitarray_set(bitarray_t* const bitarray,
+	     const size_t bit_index,
+	     const bool value)
+{
   assert(bit_index < bitarray->bit_sz);
 
   // We're storing bits in packed form, 8 per byte.  So to set the nth
@@ -180,18 +239,26 @@ void bitarray_set(bitarray_t* const bitarray,
     (bitarray->buf[bit_index / 8] & ~bitmask(bit_index)) |
     (value ? bitmask(bit_index) : 0);
 }
-
-void bitarray_randfill(bitarray_t* const bitarray){
+/* --------------------------------------------------------------------------
+ * bitarray_randfill
+ */
+void
+bitarray_randfill(bitarray_t* const bitarray)
+{
   int32_t *ptr = (int32_t *)bitarray->buf;
   for (int64_t i=0; i<bitarray->bit_sz/32 + 1; i++){
     ptr[i] = rand();
   }
 }
-
-void bitarray_rotate(bitarray_t* const bitarray,
-                     const size_t bit_offset,
-                     const size_t bit_length,
-                     const ssize_t bit_right_amount) {
+/* --------------------------------------------------------------------------
+ * bitarray_rotate
+ */
+void
+bitarray_rotate(bitarray_t* const bitarray,
+		const size_t bit_offset,
+		const size_t bit_length,
+		const ssize_t bit_right_amount)
+{
   assert(bit_offset + bit_length <= bitarray->bit_sz);
 
   if (bit_length == 0) {
@@ -203,41 +270,95 @@ void bitarray_rotate(bitarray_t* const bitarray,
   bitarray_rotate_left(bitarray, bit_offset, bit_length,
                        modulo(-bit_right_amount, bit_length));
 }
-
-static void bitarray_rotate_left(bitarray_t* const bitarray,
-                                 const size_t bit_offset,
-                                 const size_t bit_length,
-                                 const size_t bit_left_amount) {
+/* --------------------------------------------------------------------------
+ * bitarray_rotate_left
+ */
+static void
+bitarray_rotate_left(bitarray_t* const bitarray,
+		     const size_t bit_offset,
+		     const size_t bit_length,
+		     const size_t bit_left_amount)
+{
   // Triple Reverse Method
   size_t k = bit_left_amount % bit_length;
   if (k == 0) return;
   // BA = rev(rev(BA)) = rev(rev(A) rev(B))
-  bitarray_reverse (bitarray, bit_offset,
-		              bit_offset + k - 1);
-  bitarray_reverse (bitarray, bit_offset + k,
-		              bit_offset + bit_length - 1);
-  bitarray_reverse (bitarray, bit_offset,
-		              bit_offset + bit_length - 1);
+  bitarray_reverse_lut(bitarray, bit_offset,
+		       bit_offset + k - 1);
+  bitarray_reverse_lut(bitarray, bit_offset + k,
+		       bit_offset + bit_length - 1);
+  bitarray_reverse_lut(bitarray, bit_offset,
+		       bit_offset + bit_length - 1);
 }
-
-// Reverse a bitarray
-static void bitarray_reverse (bitarray_t* const bitarray,
-			      size_t begin,
-			      size_t end) {
+/* --------------------------------------------------------------------------
+ * bitarray_revers_naive
+ */
+static inline void
+bitarray_reverse_naive(bitarray_t* const bitarray,
+		       size_t start_idx,
+		       size_t end_idx)
+{
+  /* Validate parameters */
+  if (bitarray == NULL || bitarray->buf == NULL || start_idx >= end_idx) {
+    return;
+  }
+  
   bool temp;
-  while (begin < end) {
-    temp = bitarray_get(bitarray, begin);
-    bitarray_set(bitarray, begin, bitarray_get(bitarray, end));
-    bitarray_set(bitarray, end, temp);
-    begin++;
-    end--;
+  while (start_idx < end_idx) {
+    temp = bitarray_get(bitarray, start_idx);
+    bitarray_set(bitarray, start_idx, bitarray_get(bitarray, end_idx));
+    bitarray_set(bitarray, end_idx, temp);
+    start_idx++;
+    end_idx--;
   }
 }
+/* --------------------------------------------------------------------------
+ * bitarray_reverse_lut
+ */
+static inline void
+bitarray_reverse_lut(bitarray_t* const bitarray,
+		     const size_t start_idx,
+		     const size_t end_idx)
+{
+  /* Validate parameters */
+  if (bitarray == NULL || bitarray->buf == NULL || start_idx >= end_idx) {
+    return;
+  }
 
-// Naive rotation: rotate left by 1 bit for a small bitarray
-static void bitarray_rotate_left_one(bitarray_t* const bitarray,
+  /* Calculate byte indices and bit positions */
+  const size_t start_chunk = start_idx ? 8 - start_idx % 8 : 0;
+  const size_t   end_chunk = (end_idx + 1) % 8;
+  const size_t  start_byte = start_chunk ? start_idx / 8 + 1 : start_idx / 8;
+  const size_t    end_byte = end_idx / 8;
+  const size_t   num_bytes = end_byte - start_byte + 1;
+
+  /* Handle single-byte case and with bit-level reversal */
+  if (num_bytes < 2 || start_chunk || end_chunk ) {
+    bitarray_reverse_naive(bitarray, start_idx, end_idx);
+    return;
+  }
+  
+  /* Reverse byte order using XOR swap (no temporary variable) */
+  for (size_t i = start_byte; i < start_byte + num_bytes / 2; i++) {
+    size_t j = end_byte - start_byte - 1 - i;
+    bitarray->buf[i] ^= bitarray->buf[j];
+    bitarray->buf[j] ^= bitarray->buf[i];
+    bitarray->buf[i] ^= bitarray->buf[j];
+  }
+
+  /* Reverse bits within each byte using precomputed LUT */
+  for (size_t i = start_byte; i < end_byte; i++) {
+    bitarray->buf[i] = bit_reverse_table256[(uint8_t)bitarray->buf[i]];
+  }
+}
+/* --------------------------------------------------------------------------
+ * bitarray_rotate_left_one
+ */
+static void
+bitarray_rotate_left_one(bitarray_t* const bitarray,
                                      const size_t bit_offset,
-                                     const size_t bit_length) {
+                                     const size_t bit_length)
+{
   // Grab the first bit in the range, shift everything left by one, and
   // then stick the first bit at the end.
   const bool first_bit = bitarray_get(bitarray, bit_offset);
@@ -247,16 +368,24 @@ static void bitarray_rotate_left_one(bitarray_t* const bitarray,
   }
   bitarray_set(bitarray, i, first_bit);
 }
-
-static size_t modulo(const ssize_t n, const size_t m) {
+/* --------------------------------------------------------------------------
+ * modulo
+ */
+static size_t
+modulo(const ssize_t n, const size_t m)
+{
   const ssize_t signed_m = (ssize_t)m;
   assert(signed_m > 0);
   const ssize_t result = ((n % signed_m) + signed_m) % signed_m;
   assert(result >= 0);
   return (size_t)result;
 }
-
-static char bitmask(const size_t bit_index) {
+/* --------------------------------------------------------------------------
+ * bitmask
+ */
+static char
+bitmask(const size_t bit_index)
+{
   return 1 << (bit_index % 8);
 }
 
