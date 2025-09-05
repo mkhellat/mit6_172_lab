@@ -399,10 +399,10 @@ bitarray_reverse_lut(bitarray_t* const bitarray,
     return;
   }
 
-  // Single pass: swap bits, but accelerate with LUT when both ends are byte-aligned
+  // Aggressive LUT optimization: use 8-bit chunks whenever possible
   const size_t num_bytes = (bitarray->bit_sz + 7u) >> 3;
   while (lo < hi) {
-    // If we have at least 8 bits on both ends, swap 8-bit chunks using LUT
+    // If we have at least 16 bits total, try to process 8-bit chunks
     if (hi - lo + 1u >= 16u) {
       uint8_t left8  = read_u8_bits(buf, num_bytes, lo);
       uint8_t right8 = read_u8_bits(buf, num_bytes, hi - 7u);
@@ -410,14 +410,14 @@ bitarray_reverse_lut(bitarray_t* const bitarray,
       write_u8_bits(buf, num_bytes, hi - 7u,  bit_reverse_table256[left8]);
       lo += 8u;
       hi -= 8u;
-      continue;
+    } else {
+      // Fallback: bit-by-bit swap for remaining < 16 bits
+      bool tmp = bitarray_get(bitarray, lo);
+      bitarray_set(bitarray, lo, bitarray_get(bitarray, hi));
+      bitarray_set(bitarray, hi, tmp);
+      lo++;
+      hi--;
     }
-    // Fallback: bit-by-bit swap for remaining < 16 bits
-    bool tmp = bitarray_get(bitarray, lo);
-    bitarray_set(bitarray, lo, bitarray_get(bitarray, hi));
-    bitarray_set(bitarray, hi, tmp);
-    lo++;
-    hi--;
   }
 }
 /* --------------------------------------------------------------------------
