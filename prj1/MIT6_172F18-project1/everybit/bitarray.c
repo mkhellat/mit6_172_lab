@@ -37,8 +37,7 @@
 
 // ******************************** Macros **********************************
 
-//  Generate bit reversal table using recursive macros; Copied from
-//  Bit Twiddling Hacks.
+// Lookup tables for various bit widths
 static const uint8_t bit_reverse_table256[256] = {
 #define R2(n) n, n + 2*64, n + 1*64, n + 3*64
 #define R4(n) R2(n), R2(n + 2*16), R2(n + 1*16), R2(n + 3*16)
@@ -65,6 +64,33 @@ struct bitarray {
 
 
 // ******************** Prototypes for static functions *********************
+
+// Read 8 bits starting at an arbitrary bit position (may span 2 bytes)
+/* --------------------------------------------------------------------------
+ * read_u8_bits
+ *
+ * Reads eight consecutive bits starting at an arbitrary bit position.
+ * The window may straddle two adjacent bytes. Bits outside the physical
+ * buffer are treated as zeros.
+ */
+static inline uint8_t
+read_u8_bits(const uint8_t* const buf,
+             const size_t num_bytes,
+             const size_t bit_pos);
+
+// Write 8 bits to an arbitrary bit position (may span 2 bytes),
+// preserving other bits.
+/* --------------------------------------------------------------------------
+ * write_u8_bits
+ *
+ * Writes eight consecutive bits to an arbitrary bit position while preserving
+ * other bits not covered by the write. The window may straddle two adjacent
+ * bytes.
+ */
+static inline void write_u8_bits(uint8_t* const buf,
+				 const size_t num_bytes,
+				 const size_t bit_pos,
+				 const uint8_t value);
 
 // Rotates a subarray left by an arbitrary number of bits.
 //
@@ -151,6 +177,36 @@ static size_t modulo(const ssize_t n, const size_t m);
 // to access bits in your bitarray, this reverse representation should
 // not matter.
 static char bitmask(const size_t bit_index);
+
+// Reads eight consecutive bits starting at an arbitrary bit position.
+//
+// buf is a pointer to the underlying byte buffer.
+// num_bytes is the length of the buffer in bytes.
+// bit_pos is the bit index at which to begin reading (0-based from LSB of
+//          byte 0). The 8-bit window may straddle two adjacent bytes.
+//
+// Returns the 8-bit value formed by bits [bit_pos, bit_pos+7], where bit_pos
+// corresponds to the least-significant bit of the returned byte.
+static inline uint8_t read_u8_bits(const uint8_t* const buf,
+                                   const size_t num_bytes,
+                                   const size_t bit_pos);
+
+// Writes eight consecutive bits to an arbitrary bit position while preserving
+// neighboring bits not covered by the write.
+//
+// buf is a pointer to the underlying byte buffer.
+// num_bytes is the length of the buffer in bytes.
+// bit_pos is the bit index at which to begin writing (0-based from LSB of
+//          byte 0). The 8-bit window may straddle two adjacent bytes.
+// value is the 8-bit value to write such that its least-significant bit is
+//        written at position bit_pos.
+//
+// This function masks and updates only the relevant bit ranges in the one or
+// two affected bytes, leaving all other bits untouched.
+static inline void write_u8_bits(uint8_t* const buf,
+                                 const size_t num_bytes,
+                                 const size_t bit_pos,
+                                 const uint8_t value);
 
 
 // ******************************* Functions ********************************
@@ -317,39 +373,99 @@ bitarray_reverse_naive(bitarray_t* const bitarray,
  */
 static inline void
 bitarray_reverse_lut(bitarray_t* const bitarray,
-		     const size_t start_idx,
-		     const size_t end_idx)
+                     const size_t start_idx,
+                     const size_t end_idx)
 {
   /* Validate parameters */
   if (bitarray == NULL || bitarray->buf == NULL || start_idx >= end_idx) {
     return;
   }
 
-  /* Calculate byte indices and bit positions */
-  const size_t start_chunk = start_idx ? 8 - start_idx % 8 : 0;
-  const size_t   end_chunk = (end_idx + 1) % 8;
-  const size_t  start_byte = start_chunk ? start_idx / 8 + 1 : start_idx / 8;
-  const size_t    end_byte = end_idx / 8;
-  const size_t   num_bytes = end_byte - start_byte + 1;
+  uint8_t* buf = (uint8_t*)bitarray->buf;
 
-  /* Handle single-byte case and with bit-level reversal */
-  if (num_bytes < 2 || start_chunk || end_chunk ) {
-    bitarray_reverse_naive(bitarray, start_idx, end_idx);
+  size_t lo = start_idx;
+  size_t hi = end_idx;
+
+  // Fast path: subrange within one byte
+  if ((lo >> 3) == (hi >> 3)) {
+    size_t byte_index = lo >> 3;
+    uint8_t start_bit = lo & 7;
+    uint8_t end_bit = hi & 7;
+    uint8_t width = (uint8_t)(end_bit - start_bit + 1);
+    uint8_t mask = (uint8_t)(((1u << width) - 1u) << start_bit);
+    uint8_t bits = (uint8_t)((buf[byte_index] & mask) >> start_bit);
+    bits = (uint8_t)(bit_reverse_table256[bits] >> (8 - width));
+    buf[byte_index] = (uint8_t)((buf[byte_index] & ~mask) | (uint8_t)(bits << start_bit));
     return;
   }
-  
-  /* Reverse byte order using XOR swap (no temporary variable) */
-  for (size_t i = start_byte; i < start_byte + num_bytes / 2; i++) {
-    size_t j = end_byte - start_byte - 1 - i;
-    bitarray->buf[i] ^= bitarray->buf[j];
-    bitarray->buf[j] ^= bitarray->buf[i];
-    bitarray->buf[i] ^= bitarray->buf[j];
-  }
 
-  /* Reverse bits within each byte using precomputed LUT */
-  for (size_t i = start_byte; i < end_byte; i++) {
-    bitarray->buf[i] = bit_reverse_table256[(uint8_t)bitarray->buf[i]];
+  // Single pass: swap bits, but accelerate with LUT when both ends are byte-aligned
+  const size_t num_bytes = (bitarray->bit_sz + 7u) >> 3;
+  while (lo < hi) {
+    // If we have at least 8 bits on both ends, swap 8-bit chunks using LUT
+    if (hi - lo + 1u >= 16u) {
+      uint8_t left8  = read_u8_bits(buf, num_bytes, lo);
+      uint8_t right8 = read_u8_bits(buf, num_bytes, hi - 7u);
+      write_u8_bits(buf, num_bytes, lo,       bit_reverse_table256[right8]);
+      write_u8_bits(buf, num_bytes, hi - 7u,  bit_reverse_table256[left8]);
+      lo += 8u;
+      hi -= 8u;
+      continue;
+    }
+    // Fallback: bit-by-bit swap for remaining < 16 bits
+    bool tmp = bitarray_get(bitarray, lo);
+    bitarray_set(bitarray, lo, bitarray_get(bitarray, hi));
+    bitarray_set(bitarray, hi, tmp);
+    lo++;
+    hi--;
   }
+}
+/* --------------------------------------------------------------------------
+ * read_u8_bits
+ */
+static inline uint8_t
+read_u8_bits(const uint8_t* const buf,
+             const size_t num_bytes,
+             const size_t bit_pos)
+{
+    const size_t byte_index = bit_pos >> 3;
+    const uint8_t bit_offset = (uint8_t)(bit_pos & 7u);
+    const uint8_t b0 = buf[byte_index];
+    const uint8_t b1 = (byte_index + 1u < num_bytes) ?
+      buf[byte_index + 1u] : 0u;
+    if (bit_offset == 0) {
+        return b0;
+    }
+    return (uint8_t)((b0 >> bit_offset) |
+		     (uint8_t)(b1 << (8u - bit_offset)));
+}
+/* --------------------------------------------------------------------------
+ * write_u8_bits
+ */
+static inline void
+write_u8_bits(uint8_t* const buf,
+              const size_t num_bytes,
+              const size_t bit_pos,
+              const uint8_t value)
+{
+    const size_t byte_index = bit_pos >> 3;
+    const uint8_t bit_offset = (uint8_t)(bit_pos & 7u);
+    if (bit_offset == 0) {
+        buf[byte_index] = value;
+        return;
+    }
+    const uint8_t first_mask = (uint8_t)(0xFFu << bit_offset);
+    const uint8_t part0 = (uint8_t)(value << bit_offset);
+    buf[byte_index] = (uint8_t)((buf[byte_index] & (uint8_t)~first_mask) |
+				(part0 & first_mask));
+
+    const uint8_t second_mask = (uint8_t)(0xFFu >> (8u - bit_offset));
+    const uint8_t part1 = (uint8_t)(value >> (8u - bit_offset));
+    if (byte_index + 1u < num_bytes) {
+        buf[byte_index + 1u] = (uint8_t)((buf[byte_index + 1u] &
+					  (uint8_t)~second_mask) |
+					 (part1 & second_mask));
+    }
 }
 /* --------------------------------------------------------------------------
  * bitarray_rotate_left_one
