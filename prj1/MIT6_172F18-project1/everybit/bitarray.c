@@ -37,6 +37,11 @@
 
 // ******************************** Macros **********************************
 
+// Thresholds for using different LUT sizes
+#define WORD_LUT_THRESHOLD (10000u)    // 10K bits for 16-bit LUT
+#define LARGE_LUT_THRESHOLD (100000u)  // 100K bits for 32-bit LUT
+#define HUGE_LUT_THRESHOLD (1000000u)  // 1M bits for 64-bit LUT
+
 // Lookup tables for various bit widths
 static const uint8_t bit_reverse_table256[256] = {
 #define R2(n) n, n + 2*64, n + 1*64, n + 3*64
@@ -48,10 +53,84 @@ static const uint8_t bit_reverse_table256[256] = {
 #undef R6
 };
 
+// 16-bit word reversal LUT (generated at compile time)
+static const uint16_t bit_reverse_table16k[65536] = {
+#define R2_16(n) n, n + 2*16384, n + 1*16384, n + 3*16384
+#define R4_16(n) R2_16(n), R2_16(n + 2*4096), R2_16(n + 1*4096), R2_16(n + 3*4096)
+#define R6_16(n) R4_16(n), R4_16(n + 2*1024), R4_16(n + 1*1024), R4_16(n + 3*1024)
+#define R8_16(n) R6_16(n), R6_16(n + 2*256), R6_16(n + 1*256), R6_16(n + 3*256)
+#define R10_16(n) R8_16(n), R8_16(n + 2*64), R8_16(n + 1*64), R8_16(n + 3*64)
+#define R12_16(n) R10_16(n), R10_16(n + 2*16), R10_16(n + 1*16), R10_16(n + 3*16)
+#define R14_16(n) R12_16(n), R12_16(n + 2*4), R12_16(n + 1*4), R12_16(n + 3*4)
+#define R16_16(n) R14_16(n), R14_16(n + 2*1), R14_16(n + 1*1), R14_16(n + 3*1)
+    R16_16(0), R16_16(2), R16_16(1), R16_16(3)
+#undef R2_16
+#undef R4_16
+#undef R6_16
+#undef R8_16
+#undef R10_16
+#undef R12_16
+#undef R14_16
+#undef R16_16
+};
+
+// 32-bit word reversal LUT (256 entries for 8-bit chunks, generated at compile time)
+static const uint32_t bit_reverse_table32[256] = {
+#define R2_32(n) n, n + 2*64, n + 1*64, n + 3*64
+#define R4_32(n) R2_32(n), R2_32(n + 2*16), R2_32(n + 1*16), R2_32(n + 3*16)
+#define R6_32(n) R4_32(n), R4_32(n + 2*4), R4_32(n + 1*4), R4_32(n + 3*4)
+    R6_32(0), R6_32(2), R6_32(1), R6_32(3)
+#undef R2_32
+#undef R4_32
+#undef R6_32
+};
+
+// 64-bit word reversal LUT (256 entries for 8-bit chunks, generated at compile time)
+static const uint64_t bit_reverse_table64[256] = {
+#define R2_64(n) n, n + 2*64, n + 1*64, n + 3*64
+#define R4_64(n) R2_64(n), R2_64(n + 2*16), R2_64(n + 1*16), R2_64(n + 3*16)
+#define R6_64(n) R4_64(n), R4_64(n + 2*4), R4_64(n + 1*4), R4_64(n + 3*4)
+    R6_64(0), R6_64(2), R6_64(1), R6_64(3)
+#undef R2_64
+#undef R4_64
+#undef R6_64
+};
+
 
 // ********************************* Types **********************************
 
 // Concrete data type representing an array of bits.
+
+// ********************************* Function Prototypes **********************************
+
+static inline uint8_t read_u8_bits(const uint8_t* const buf,
+                                   const size_t num_bytes,
+                                   const size_t bit_pos);
+static inline void write_u8_bits(uint8_t* const buf,
+                                 const size_t num_bytes,
+                                 const size_t bit_pos,
+                                 const uint8_t value);
+static inline uint16_t read_u16_bits(const uint8_t* const buf,
+                                     const size_t num_bytes,
+                                     const size_t bit_pos);
+static inline void write_u16_bits(uint8_t* const buf,
+                                  const size_t num_bytes,
+                                  const size_t bit_pos,
+                                  const uint16_t value);
+static inline uint32_t read_u32_bits(const uint8_t* const buf,
+                                     const size_t num_bytes,
+                                     const size_t bit_pos);
+static inline void write_u32_bits(uint8_t* const buf,
+                                  const size_t num_bytes,
+                                  const size_t bit_pos,
+                                  const uint32_t value);
+static inline uint64_t read_u64_bits(const uint8_t* const buf,
+                                     const size_t num_bytes,
+                                     const size_t bit_pos);
+static inline void write_u64_bits(uint8_t* const buf,
+                                  const size_t num_bytes,
+                                  const size_t bit_pos,
+                                  const uint64_t value);
 struct bitarray {
   // The number of bits represented by this bit array.
   // Need not be divisible by 8.
@@ -399,24 +478,143 @@ bitarray_reverse_lut(bitarray_t* const bitarray,
     return;
   }
 
-  // Aggressive LUT optimization: use 8-bit chunks whenever possible
+  // Four-tier LUT optimization: 8-bit, 16-bit, 32-bit, and 64-bit LUTs
   const size_t num_bytes = (bitarray->bit_sz + 7u) >> 3;
-  while (lo < hi) {
-    // If we have at least 16 bits total, try to process 8-bit chunks
-    if (hi - lo + 1u >= 16u) {
-      uint8_t left8  = read_u8_bits(buf, num_bytes, lo);
-      uint8_t right8 = read_u8_bits(buf, num_bytes, hi - 7u);
-      write_u8_bits(buf, num_bytes, lo,       bit_reverse_table256[right8]);
-      write_u8_bits(buf, num_bytes, hi - 7u,  bit_reverse_table256[left8]);
-      lo += 8u;
-      hi -= 8u;
-    } else {
-      // Fallback: bit-by-bit swap for remaining < 16 bits
-      bool tmp = bitarray_get(bitarray, lo);
-      bitarray_set(bitarray, lo, bitarray_get(bitarray, hi));
-      bitarray_set(bitarray, hi, tmp);
-      lo++;
-      hi--;
+  const size_t total_bits = hi - lo + 1u;
+  
+  if (total_bits >= HUGE_LUT_THRESHOLD) {
+    // Use 64-bit LUT for huge arrays
+    while (lo < hi) {
+      // Process 64-bit chunks when possible
+      if (hi - lo + 1u >= 128u) {
+        uint64_t left64  = read_u64_bits(buf, num_bytes, lo);
+        uint64_t right64 = read_u64_bits(buf, num_bytes, hi - 63u);
+        write_u64_bits(buf, num_bytes, lo,       bit_reverse_table64[right64 & 0xFF]);
+        write_u64_bits(buf, num_bytes, hi - 63u, bit_reverse_table64[left64 & 0xFF]);
+        lo += 64u;
+        hi -= 64u;
+      }
+      // Process 32-bit chunks
+      else if (hi - lo + 1u >= 64u) {
+        uint32_t left32  = read_u32_bits(buf, num_bytes, lo);
+        uint32_t right32 = read_u32_bits(buf, num_bytes, hi - 31u);
+        write_u32_bits(buf, num_bytes, lo,       bit_reverse_table32[right32 & 0xFF]);
+        write_u32_bits(buf, num_bytes, hi - 31u, bit_reverse_table32[left32 & 0xFF]);
+        lo += 32u;
+        hi -= 32u;
+      }
+      // Process 16-bit chunks
+      else if (hi - lo + 1u >= 32u) {
+        uint16_t left16  = read_u16_bits(buf, num_bytes, lo);
+        uint16_t right16 = read_u16_bits(buf, num_bytes, hi - 15u);
+        write_u16_bits(buf, num_bytes, lo,       bit_reverse_table16k[right16]);
+        write_u16_bits(buf, num_bytes, hi - 15u, bit_reverse_table16k[left16]);
+        lo += 16u;
+        hi -= 16u;
+      }
+      // Process 8-bit chunks
+      else if (hi - lo + 1u >= 16u) {
+        uint8_t left8  = read_u8_bits(buf, num_bytes, lo);
+        uint8_t right8 = read_u8_bits(buf, num_bytes, hi - 7u);
+        write_u8_bits(buf, num_bytes, lo,       bit_reverse_table256[right8]);
+        write_u8_bits(buf, num_bytes, hi - 7u,  bit_reverse_table256[left8]);
+        lo += 8u;
+        hi -= 8u;
+      } else {
+        // Fallback: bit-by-bit swap for remaining < 16 bits
+        bool tmp = bitarray_get(bitarray, lo);
+        bitarray_set(bitarray, lo, bitarray_get(bitarray, hi));
+        bitarray_set(bitarray, hi, tmp);
+        lo++;
+        hi--;
+      }
+    }
+  } else if (total_bits >= LARGE_LUT_THRESHOLD) {
+    // Use 32-bit LUT for very large arrays
+    while (lo < hi) {
+      // Process 32-bit chunks when possible
+      if (hi - lo + 1u >= 64u) {
+        uint32_t left32  = read_u32_bits(buf, num_bytes, lo);
+        uint32_t right32 = read_u32_bits(buf, num_bytes, hi - 31u);
+        write_u32_bits(buf, num_bytes, lo,       bit_reverse_table32[right32 & 0xFF]);
+        write_u32_bits(buf, num_bytes, hi - 31u, bit_reverse_table32[left32 & 0xFF]);
+        lo += 32u;
+        hi -= 32u;
+      }
+      // Process 16-bit chunks
+      else if (hi - lo + 1u >= 32u) {
+        uint16_t left16  = read_u16_bits(buf, num_bytes, lo);
+        uint16_t right16 = read_u16_bits(buf, num_bytes, hi - 15u);
+        write_u16_bits(buf, num_bytes, lo,       bit_reverse_table16k[right16]);
+        write_u16_bits(buf, num_bytes, hi - 15u, bit_reverse_table16k[left16]);
+        lo += 16u;
+        hi -= 16u;
+      }
+      // Process 8-bit chunks
+      else if (hi - lo + 1u >= 16u) {
+        uint8_t left8  = read_u8_bits(buf, num_bytes, lo);
+        uint8_t right8 = read_u8_bits(buf, num_bytes, hi - 7u);
+        write_u8_bits(buf, num_bytes, lo,       bit_reverse_table256[right8]);
+        write_u8_bits(buf, num_bytes, hi - 7u,  bit_reverse_table256[left8]);
+        lo += 8u;
+        hi -= 8u;
+      } else {
+        // Fallback: bit-by-bit swap for remaining < 16 bits
+        bool tmp = bitarray_get(bitarray, lo);
+        bitarray_set(bitarray, lo, bitarray_get(bitarray, hi));
+        bitarray_set(bitarray, hi, tmp);
+        lo++;
+        hi--;
+      }
+    }
+  } else if (total_bits >= WORD_LUT_THRESHOLD) {
+    // Use 16-bit LUT for medium arrays
+    while (lo < hi) {
+      // Process 16-bit chunks when possible
+      if (hi - lo + 1u >= 32u) {
+        uint16_t left16  = read_u16_bits(buf, num_bytes, lo);
+        uint16_t right16 = read_u16_bits(buf, num_bytes, hi - 15u);
+        write_u16_bits(buf, num_bytes, lo,       bit_reverse_table16k[right16]);
+        write_u16_bits(buf, num_bytes, hi - 15u, bit_reverse_table16k[left16]);
+        lo += 16u;
+        hi -= 16u;
+      }
+      // Process 8-bit chunks
+      else if (hi - lo + 1u >= 16u) {
+        uint8_t left8  = read_u8_bits(buf, num_bytes, lo);
+        uint8_t right8 = read_u8_bits(buf, num_bytes, hi - 7u);
+        write_u8_bits(buf, num_bytes, lo,       bit_reverse_table256[right8]);
+        write_u8_bits(buf, num_bytes, hi - 7u,  bit_reverse_table256[left8]);
+        lo += 8u;
+        hi -= 8u;
+      } else {
+        // Fallback: bit-by-bit swap for remaining < 16 bits
+        bool tmp = bitarray_get(bitarray, lo);
+        bitarray_set(bitarray, lo, bitarray_get(bitarray, hi));
+        bitarray_set(bitarray, hi, tmp);
+        lo++;
+        hi--;
+      }
+    }
+  } else {
+    // Use 8-bit LUT for small arrays
+    while (lo < hi) {
+      // If we have at least 16 bits total, try to process 8-bit chunks
+      if (hi - lo + 1u >= 16u) {
+        uint8_t left8  = read_u8_bits(buf, num_bytes, lo);
+        uint8_t right8 = read_u8_bits(buf, num_bytes, hi - 7u);
+        write_u8_bits(buf, num_bytes, lo,       bit_reverse_table256[right8]);
+        write_u8_bits(buf, num_bytes, hi - 7u,  bit_reverse_table256[left8]);
+        lo += 8u;
+        hi -= 8u;
+      } else {
+        // Fallback: bit-by-bit swap for remaining < 16 bits
+        bool tmp = bitarray_get(bitarray, lo);
+        bitarray_set(bitarray, lo, bitarray_get(bitarray, hi));
+        bitarray_set(bitarray, hi, tmp);
+        lo++;
+        hi--;
+      }
     }
   }
 }
@@ -438,6 +636,40 @@ read_u8_bits(const uint8_t* const buf,
     }
     return (uint8_t)((b0 >> bit_offset) |
 		     (uint8_t)(b1 << (8u - bit_offset)));
+}
+
+/* --------------------------------------------------------------------------
+ * read_u16_bits
+ */
+static inline uint16_t
+read_u16_bits(const uint8_t* const buf,
+              const size_t num_bytes,
+              const size_t bit_pos)
+{
+    const size_t byte_index = bit_pos >> 3;
+    const uint8_t bit_offset = (uint8_t)(bit_pos & 7u);
+    
+    if (bit_offset == 0 && byte_index + 2u <= num_bytes) {
+        // Aligned 16-bit read
+        return *(const uint16_t*)(buf + byte_index);
+    }
+    
+    // Unaligned read: combine up to 3 bytes
+    uint16_t result = 0;
+    for (int i = 0; i < 2; i++) {
+        if (byte_index + i < num_bytes) {
+            result |= ((uint16_t)buf[byte_index + i]) << (i * 8);
+        }
+    }
+    
+    if (bit_offset != 0) {
+        result >>= bit_offset;
+        if (byte_index + 2 < num_bytes) {
+            result |= ((uint16_t)buf[byte_index + 2]) << (16 - bit_offset);
+        }
+    }
+    
+    return result;
 }
 /* --------------------------------------------------------------------------
  * write_u8_bits
@@ -467,6 +699,204 @@ write_u8_bits(uint8_t* const buf,
 					 (part1 & second_mask));
     }
 }
+
+/* --------------------------------------------------------------------------
+ * write_u16_bits
+ */
+static inline void
+write_u16_bits(uint8_t* const buf,
+               const size_t num_bytes,
+               const size_t bit_pos,
+               const uint16_t value)
+{
+    const size_t byte_index = bit_pos >> 3;
+    const uint8_t bit_offset = (uint8_t)(bit_pos & 7u);
+    
+    if (bit_offset == 0 && byte_index + 2u <= num_bytes) {
+        // Aligned 16-bit write
+        *(uint16_t*)(buf + byte_index) = value;
+        return;
+    }
+    
+    // Unaligned write: split into bytes
+    for (int i = 0; i < 2; i++) {
+        if (byte_index + i < num_bytes) {
+            uint8_t byte_val = (uint8_t)(value >> (i * 8));
+            if (i == 0 && bit_offset != 0) {
+                // First byte needs special handling
+                const uint8_t first_mask = (uint8_t)(0xFFu << bit_offset);
+                const uint8_t part0 = (uint8_t)(byte_val << bit_offset);
+                buf[byte_index] = (uint8_t)((buf[byte_index] & (uint8_t)~first_mask) |
+                                          (part0 & first_mask));
+            } else {
+                buf[byte_index + i] = byte_val;
+            }
+        }
+    }
+    
+    if (bit_offset != 0 && byte_index + 2 < num_bytes) {
+        // Handle overflow bits
+        uint8_t overflow = (uint8_t)(value >> (16 - bit_offset));
+        const uint8_t second_mask = (uint8_t)(0xFFu >> (8u - bit_offset));
+        buf[byte_index + 2] = (uint8_t)((buf[byte_index + 2] & (uint8_t)~second_mask) |
+                                       (overflow & second_mask));
+    }
+}
+
+/* --------------------------------------------------------------------------
+ * read_u32_bits
+ */
+static inline uint32_t
+read_u32_bits(const uint8_t* const buf,
+              const size_t num_bytes,
+              const size_t bit_pos)
+{
+    const size_t byte_index = bit_pos >> 3;
+    const uint8_t bit_offset = (uint8_t)(bit_pos & 7u);
+    
+    if (bit_offset == 0 && byte_index + 4u <= num_bytes) {
+        // Aligned 32-bit read
+        return *(const uint32_t*)(buf + byte_index);
+    }
+    
+    // Unaligned read: combine up to 5 bytes
+    uint32_t result = 0;
+    for (int i = 0; i < 4; i++) {
+        if (byte_index + i < num_bytes) {
+            result |= ((uint32_t)buf[byte_index + i]) << (i * 8);
+        }
+    }
+    
+    if (bit_offset != 0) {
+        result >>= bit_offset;
+        if (byte_index + 4 < num_bytes) {
+            result |= ((uint32_t)buf[byte_index + 4]) << (32 - bit_offset);
+        }
+    }
+    
+    return result;
+}
+
+/* --------------------------------------------------------------------------
+ * write_u32_bits
+ */
+static inline void
+write_u32_bits(uint8_t* const buf,
+               const size_t num_bytes,
+               const size_t bit_pos,
+               const uint32_t value)
+{
+    const size_t byte_index = bit_pos >> 3;
+    const uint8_t bit_offset = (uint8_t)(bit_pos & 7u);
+    
+    if (bit_offset == 0 && byte_index + 4u <= num_bytes) {
+        // Aligned 32-bit write
+        *(uint32_t*)(buf + byte_index) = value;
+        return;
+    }
+    
+    // Unaligned write: split into bytes
+    for (int i = 0; i < 4; i++) {
+        if (byte_index + i < num_bytes) {
+            uint8_t byte_val = (uint8_t)(value >> (i * 8));
+            if (i == 0 && bit_offset != 0) {
+                // First byte needs special handling
+                const uint8_t first_mask = (uint8_t)(0xFFu << bit_offset);
+                const uint8_t part0 = (uint8_t)(byte_val << bit_offset);
+                buf[byte_index] = (uint8_t)((buf[byte_index] & (uint8_t)~first_mask) |
+                                          (part0 & first_mask));
+            } else {
+                buf[byte_index + i] = byte_val;
+            }
+        }
+    }
+    
+    if (bit_offset != 0 && byte_index + 4 < num_bytes) {
+        // Handle overflow bits
+        uint8_t overflow = (uint8_t)(value >> (32 - bit_offset));
+        const uint8_t second_mask = (uint8_t)(0xFFu >> (8u - bit_offset));
+        buf[byte_index + 4] = (uint8_t)((buf[byte_index + 4] & (uint8_t)~second_mask) |
+                                       (overflow & second_mask));
+    }
+}
+
+/* --------------------------------------------------------------------------
+ * read_u64_bits
+ */
+static inline uint64_t
+read_u64_bits(const uint8_t* const buf,
+              const size_t num_bytes,
+              const size_t bit_pos)
+{
+    const size_t byte_index = bit_pos >> 3;
+    const uint8_t bit_offset = (uint8_t)(bit_pos & 7u);
+    
+    if (bit_offset == 0 && byte_index + 8u <= num_bytes) {
+        // Aligned 64-bit read
+        return *(const uint64_t*)(buf + byte_index);
+    }
+    
+    // Unaligned read: combine up to 9 bytes
+    uint64_t result = 0;
+    for (int i = 0; i < 8; i++) {
+        if (byte_index + i < num_bytes) {
+            result |= ((uint64_t)buf[byte_index + i]) << (i * 8);
+        }
+    }
+    
+    if (bit_offset != 0) {
+        result >>= bit_offset;
+        if (byte_index + 8 < num_bytes) {
+            result |= ((uint64_t)buf[byte_index + 8]) << (64 - bit_offset);
+        }
+    }
+    
+    return result;
+}
+
+/* --------------------------------------------------------------------------
+ * write_u64_bits
+ */
+static inline void
+write_u64_bits(uint8_t* const buf,
+               const size_t num_bytes,
+               const size_t bit_pos,
+               const uint64_t value)
+{
+    const size_t byte_index = bit_pos >> 3;
+    const uint8_t bit_offset = (uint8_t)(bit_pos & 7u);
+    
+    if (bit_offset == 0 && byte_index + 8u <= num_bytes) {
+        // Aligned 64-bit write
+        *(uint64_t*)(buf + byte_index) = value;
+        return;
+    }
+    
+    // Unaligned write: split into bytes
+    for (int i = 0; i < 8; i++) {
+        if (byte_index + i < num_bytes) {
+            uint8_t byte_val = (uint8_t)(value >> (i * 8));
+            if (i == 0 && bit_offset != 0) {
+                // First byte needs special handling
+                const uint8_t first_mask = (uint8_t)(0xFFu << bit_offset);
+                const uint8_t part0 = (uint8_t)(byte_val << bit_offset);
+                buf[byte_index] = (uint8_t)((buf[byte_index] & (uint8_t)~first_mask) |
+                                          (part0 & first_mask));
+            } else {
+                buf[byte_index + i] = byte_val;
+            }
+        }
+    }
+    
+    if (bit_offset != 0 && byte_index + 8 < num_bytes) {
+        // Handle overflow bits
+        uint8_t overflow = (uint8_t)(value >> (64 - bit_offset));
+        const uint8_t second_mask = (uint8_t)(0xFFu >> (8u - bit_offset));
+        buf[byte_index + 8] = (uint8_t)((buf[byte_index + 8] & (uint8_t)~second_mask) |
+                                       (overflow & second_mask));
+    }
+}
+
 /* --------------------------------------------------------------------------
  * bitarray_rotate_left_one
  */
