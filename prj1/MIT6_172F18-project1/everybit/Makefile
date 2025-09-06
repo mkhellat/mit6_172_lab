@@ -53,6 +53,7 @@ HEADERS = $(wildcard *.h)
 # What we're building
 OBJECTS = $(patsubst %.c,%.o,$(SOURCES))
 PRODUCT = everybit
+LUT_TEST = lut_test
 
 # What we're building with
 CC = clang
@@ -94,19 +95,23 @@ endif
 
 
 # By default, make the product.
-all:		$(PRODUCT)
+all:		$(PRODUCT) $(LUT_TEST)
 
 # How to compile a C file
 %.o:		%.c $(HEADERS) .buildmode
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -o $@ -c $<
 
-# How to link the product
-$(PRODUCT):	$(OBJECTS) .buildmode
-	$(CC) $(OBJECTS) $(LDFLAGS) $(EXTRA_LDFLAGS) -o $@
+# How to link the product (exclude lut_test.o)
+$(PRODUCT):	bitarray.o ktiming.o main.o tests.o .buildmode
+	$(CC) bitarray.o ktiming.o main.o tests.o $(LDFLAGS) $(EXTRA_LDFLAGS) -o $@
+
+# How to build the LUT test
+$(LUT_TEST):	lut_test.o bitarray.o .buildmode
+	$(CC) lut_test.o bitarray.o $(LDFLAGS) $(EXTRA_LDFLAGS) -o $@
 
 # How to clean up
 clean:
-	$(RM) everybit *.o .buildmode *.gcov *.gcno *.gcda
+	$(RM) everybit lut_test *.o .buildmode *.gcov *.gcno *.gcda
 
 test: $(PRODUCT)
 	../test.py $(PRODUCT)

@@ -85,4 +85,8 @@ void bitarray_rotate(bitarray_t* const bitarray,
                      const size_t bit_length,
                      const ssize_t bit_right_amount);
 
+// Clean up the global LUT manager. Should be called at program termination
+// to free all hash table resources.
+void bitarray_cleanup_lut_manager(void);
+
 #endif  // BITARRAY_H
