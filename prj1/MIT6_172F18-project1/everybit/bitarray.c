@@ -26,7 +26,6 @@
 
 
 #include "./bitarray.h"
-#include <stdio.h>
 
 #include <assert.h>
 #include <stdbool.h>
@@ -36,22 +35,24 @@
 #include <sys/types.h>
 
 
+
+
+
 // ******************************** Macros **********************************
 
 // Hash table configuration for LUT management
-#define LUT_HASH_TABLE_SIZE 16
-#define LUT_ENTRY_CACHE_SIZE 8
+#define LUT_ENTRY_CACHE_SIZE 9
 
 // Thresholds for using different LUT sizes
-#define TINY_LUT_THRESHOLD (1000u)     // 1K bits for 32-bit LUT
-#define SMALL_LUT_THRESHOLD (10000u)   // 10K bits for 64-bit LUT  
-#define MEDIUM_LUT_THRESHOLD (100000u) // 100K bits for 128-bit LUT
-#define LARGE_LUT_THRESHOLD (500000u)  // 500K bits for 256-bit LUT
-#define CACHE_LINE_LUT_THRESHOLD (1000000u) // 1M bits for 512-bit LUT (cache line)
-#define HUGE_LUT_THRESHOLD (5000000u) // 5M bits for 1024-bit LUT
-#define MASSIVE_LUT_THRESHOLD (20000000u) // 20M bits for 2048-bit LUT
-#define EXTREME_LUT_THRESHOLD (100000000u) // 100M bits for 4096-bit LUT
-#define ULTRA_LUT_THRESHOLD (200000000u) // 200M bits for 8192-bit LUT
+#define TINY_LUT_THRESHOLD       (500u)       // 500 bits for 32-bit LUT
+#define SMALL_LUT_THRESHOLD      (5000u)      // 5K bits for 64-bit LUT  
+#define MEDIUM_LUT_THRESHOLD     (50000u)     // 50K bits for 128-bit LUT
+#define LARGE_LUT_THRESHOLD      (250000u)    // 250K bits for 256-bit LUT
+#define CACHE_LINE_LUT_THRESHOLD (500000u)    // 500K bits for 512-bit LUT (cache line)
+#define HUGE_LUT_THRESHOLD       (2500000u)   // 2.5M bits for 1024-bit LUT
+#define MASSIVE_LUT_THRESHOLD    (10000000u)  // 10M bits for 2048-bit LUT
+#define EXTREME_LUT_THRESHOLD    (50000000u)  // 50M bits for 4096-bit LUT
+#define ULTRA_LUT_THRESHOLD      (100000000u) // 100M bits for 8192-bit LUT
 
 // Lookup tables for various bit widths
 static const uint8_t bit_reverse_table256[256] = {
@@ -63,6 +64,20 @@ static const uint8_t bit_reverse_table256[256] = {
 #undef R4
 #undef R6
 };
+
+
+// ********************************* Types **********************************
+
+// Concrete data type representing an array of bits.
+struct bitarray {
+  // The number of bits represented by this bit array.
+  // Need not be divisible by 8.
+  size_t bit_sz;
+  // The underlying memory buffer that stores the bits in
+  // packed form (8 per byte).
+  char* buf;
+};
+
 
 // 128-bit LUT (256 entries) - implemented as 2x uint64_t
 typedef struct {
@@ -105,22 +120,32 @@ typedef struct {
 } uint2048_t;
 
 
+// 4096-bit LUT (256 entries) - implemented as 64x uint64_t
+typedef struct {
+    uint64_t chunk[64];
+} uint4096_t;
 
 
+// 8192-bit LUT (256 entries) - implemented as 128x uint64_t
+typedef struct {
+    uint64_t chunk[128];
+} uint8192_t;
 
-// ********************************* Types **********************************
 
 // LUT entry types for different bit widths
 typedef enum {
-    LUT_TYPE_8BIT = 0,
-    LUT_TYPE_32BIT = 1,
-    LUT_TYPE_64BIT = 2,
-    LUT_TYPE_128BIT = 3,
-    LUT_TYPE_256BIT = 4,
-    LUT_TYPE_512BIT = 5,
-    LUT_TYPE_1024BIT = 6,
-    LUT_TYPE_2048BIT = 7
+    LUT_TYPE_8BIT = 0,      // Fallback for very small arrays
+    LUT_TYPE_32BIT = 1,     // 500+ bits
+    LUT_TYPE_64BIT = 2,     // 5K+ bits
+    LUT_TYPE_128BIT = 3,    // 50K+ bits
+    LUT_TYPE_256BIT = 4,    // 250K+ bits
+    LUT_TYPE_512BIT = 5,    // 500K+ bits (cache line)
+    LUT_TYPE_1024BIT = 6,   // 2.5M+ bits
+    LUT_TYPE_2048BIT = 7,   // 10M+ bits
+    LUT_TYPE_4096BIT = 8,   // 50M+ bits
+    LUT_TYPE_8192BIT = 9    // 100M+ bits
 } lut_type_t;
+
 
 // Hash table entry for LUT management
 typedef struct lut_hash_entry {
@@ -131,72 +156,44 @@ typedef struct lut_hash_entry {
     struct lut_hash_entry* next; // For collision handling
 } lut_hash_entry_t;
 
+
 // Hash table for LUT selection
 typedef struct {
     lut_hash_entry_t cache[LUT_ENTRY_CACHE_SIZE];
     size_t cache_head;
 } lut_manager_t;
 
-// Concrete data type representing an array of bits.
 
-// ********************************* Global Variables **********************************
+// **************************** Global Variables ****************************
 
 // Global LUT manager instance
 static lut_manager_t* g_lut_manager = NULL;
 
-// ********************************* Function Prototypes **********************************
+// ********************** Large Integer Bit Operations **********************
 
-static inline uint64_t read_u64_bits(const uint8_t* const buf,
-                                     const size_t num_bytes,
-                                     const size_t bit_pos);
-static inline void write_u64_bits(uint8_t* const buf,
-                                  const size_t num_bytes,
-                                  const size_t bit_pos,
-                                  const uint64_t value);
-static inline uint128_t read_u128_bits(const uint8_t* const buf,
-                                       const size_t num_bytes,
-                                       const size_t bit_pos);
-static inline void write_u128_bits(uint8_t* const buf,
-                                   const size_t num_bytes,
-                                   const size_t bit_pos,
-                                   const uint128_t value);
-static inline uint512_t read_u512_bits(const uint8_t* const buf,
-                                       const size_t num_bytes,
-                                       const size_t bit_pos);
-static inline void write_u512_bits(uint8_t* const buf,
-                                   const size_t num_bytes,
-                                   const size_t bit_pos,
-                                   const uint512_t value);
-static inline uint1024_t read_u1024_bits(const uint8_t* const buf,
-                                         const size_t num_bytes,
-                                         const size_t bit_pos);
-static inline void write_u1024_bits(uint8_t* const buf,
-                                    const size_t num_bytes,
-                                    const size_t bit_pos,
-                                    const uint1024_t value);
-static inline uint2048_t read_u2048_bits(const uint8_t* const buf,
-                                         const size_t num_bytes,
-                                         const size_t bit_pos);
-static inline void write_u2048_bits(uint8_t* const buf,
-                                    const size_t num_bytes,
-                                    const size_t bit_pos,
-                                    const uint2048_t value);
-static inline uint128_t reverse_u128_bits(uint128_t value);
-static inline uint512_t reverse_u512_bits(uint512_t value);
-static inline uint1024_t reverse_u1024_bits(uint1024_t value);
-static inline uint2048_t reverse_u2048_bits(uint2048_t value);
-struct bitarray {
-  // The number of bits represented by this bit array.
-  // Need not be divisible by 8.
-  size_t bit_sz;
-
-  // The underlying memory buffer that stores the bits in
-  // packed form (8 per byte).
-  char* buf;
-};
+// 64-bit LUT operations
+static inline uint64_t
+read_u64_bits(const uint8_t* const buf, const size_t num_bytes, const size_t bit_pos);
+static inline void
+write_u64_bits(uint8_t* const buf, const size_t num_bytes, const size_t bit_pos, const uint64_t value);
+// 128-bit LUT operations
+static inline uint128_t
+read_u128_bits(const uint8_t* const buf, const size_t num_bytes, const size_t bit_pos);
+static inline void
+write_u128_bits(uint8_t* const buf, const size_t num_bytes, const size_t bit_pos, const uint128_t value);
+static inline uint128_t
+reverse_u128_bits(uint128_t value);
+// 512-bit LUT operations
+static inline uint512_t
+read_u512_bits(const uint8_t* const buf, const size_t num_bytes, const size_t bit_pos);
+static inline void
+write_u512_bits(uint8_t* const buf, const size_t num_bytes, const size_t bit_pos, const uint512_t value);
+static inline uint512_t
+reverse_u512_bits(uint512_t value);
 
 
-// ******************** Prototypes for static functions *********************
+
+// ************************** Function Prototypes ***************************
 
 // Hash table management functions
 static lut_manager_t* lut_manager_init(void);
@@ -206,16 +203,19 @@ static size_t lut_manager_get_lut_size(lut_type_t type);
 static lut_hash_entry_t* lut_manager_find_entry(lut_manager_t* manager, size_t bit_count);
 static void lut_manager_add_entry(lut_manager_t* manager, size_t bit_count, lut_type_t type);
 
-// Large integer bit operations
+// Huge integer bit operations
 static uint1024_t read_u1024_bits(const uint8_t* buf, size_t num_bytes, size_t bit_pos);
 static void write_u1024_bits(uint8_t* buf, size_t num_bytes, size_t bit_pos, uint1024_t value);
 static uint1024_t reverse_u1024_bits(uint1024_t value);
 static uint2048_t read_u2048_bits(const uint8_t* buf, size_t num_bytes, size_t bit_pos);
 static void write_u2048_bits(uint8_t* buf, size_t num_bytes, size_t bit_pos, uint2048_t value);
 static uint2048_t reverse_u2048_bits(uint2048_t value);
-
-// Read 8 bits starting at an arbitrary bit position (may span 2 bytes)
-
+static uint4096_t read_u4096_bits(const uint8_t* buf, size_t num_bytes, size_t bit_pos);
+static void write_u4096_bits(uint8_t* buf, size_t num_bytes, size_t bit_pos, uint4096_t value);
+static uint4096_t reverse_u4096_bits(uint4096_t value);
+static uint8192_t read_u8192_bits(const uint8_t* buf, size_t num_bytes, size_t bit_pos);
+static void write_u8192_bits(uint8_t* buf, size_t num_bytes, size_t bit_pos, uint8192_t value);
+static uint8192_t reverse_u8192_bits(uint8192_t value);
 
 // Rotates a subarray left by an arbitrary number of bits.
 //
@@ -227,10 +227,11 @@ static uint2048_t reverse_u2048_bits(uint2048_t value);
 // The subarray spans the half-open interval
 // [bit_offset, bit_offset + bit_length)
 // That is, the start is inclusive, but the end is exclusive.
-static void bitarray_rotate_left(bitarray_t* const bitarray,
-                                 const size_t bit_offset,
-                                 const size_t bit_length,
-                                 const size_t bit_left_amount);
+static void
+bitarray_rotate_left(bitarray_t* const bitarray,
+		     const size_t bit_offset,
+		     const size_t bit_length,
+		     const size_t bit_left_amount);
 
 // Reverse a bitarray in-place.
 //
@@ -238,33 +239,37 @@ static void bitarray_rotate_left(bitarray_t* const bitarray,
 //
 // Swap bits starting from LSB and MSB moving inwards towards the
 // center of the array.
-static inline void bitarray_reverse_naive(bitarray_t* const bitarray,
-					  size_t start_idx,
-					  size_t end);
+static inline void
+bitarray_reverse_naive(bitarray_t* const bitarray,
+		       size_t start_idx,
+		       size_t end);
 
-// Block-swap algorithm for very large arrays - better cache locality than triple-reverse
-static inline void bitarray_reverse_block_swap(bitarray_t* const bitarray,
-                                               const size_t start_idx,
-                                               const size_t end_idx);
+// Block-wise reversal algorithm for very large arrays - uses 64-bit
+// chunks for better cache locality
+static inline void
+bitarray_reverse_block_wise(bitarray_t* const bitarray,
+			    const size_t start_idx,
+			    const size_t end_idx);
 
-// Reverse a subarray within a bitarray using LUT optimization
+// Reverse a subarray within a bitarray using adaptive LUT optimization
 //
 // start_idx Starting bit index of subarray to reverse
-// end Ending bit index of subarray to reverse (inclusive)
+// end_idx   Ending bit index of subarray to reverse (inclusive)
 // 
-// This function reverses a contiguous subarray of bits within a
-// bitarray using a combination of bit-level and byte-level operations
-// for optimal performance. The algorithm:
-// 1. Handles partial bytes at subarray boundaries with bit-level
-// operations
-// 2. Uses LUT-based byte reversal for complete bytes in the middle
-// section
-// 3. Maintains the original bitarray structure outside the subarray
+// This function reverses a contiguous subarray of bits using an adaptive
+// strategy that selects the optimal LUT size based on array size. The
+// algorithm:
+// 1. For extremely large arrays (200M+ bits): delegates to block-wise reversal
+// 2. For smaller arrays: uses LUT manager to select optimal chunk size
+//    (8-bit to 8192-bit) based on total bit count
+// 3. Employs cache prefetching and optimized bit operations
+// 4. Falls back to naive bit-by-bit reversal if LUT manager fails
 // 
-// Performance: O(n) time complexity with optimized byte operations
-static inline void bitarray_reverse_lut(bitarray_t* const bitarray,
-					const size_t start_idx,
-					const size_t end_idx);
+// Performance: O(n) with adaptive optimization based on array size
+static inline void
+bitarray_reverse_lut(bitarray_t* const bitarray,
+		     const size_t start_idx,
+		     const size_t end_idx);
 
 // Rotates a subarray left by one bit.
 //
@@ -305,16 +310,8 @@ static size_t modulo(const ssize_t n, const size_t m);
 // not matter.
 static char bitmask(const size_t bit_index);
 
-// Reads eight consecutive bits starting at an arbitrary bit position.
-//
-// buf is a pointer to the underlying byte buffer.
-// num_bytes is the length of the buffer in bytes.
-// bit_pos is the bit index at which to begin reading (0-based from LSB of
-//          byte 0). The 8-bit window may straddle two adjacent bytes.
-//
 
-
-// ******************************* Generic Bit Functions ********************************
+//************************** Generic Bit Functions **************************
 
 /* --------------------------------------------------------------------------
  * read_bits
@@ -466,6 +463,7 @@ write_bits(uint8_t* buf,
     }
 }
 
+
 // ******************************* Functions ********************************
 
 /* --------------------------------------------------------------------------
@@ -504,7 +502,6 @@ bitarray_free(bitarray_t* const bitarray)
   bitarray->buf = NULL;
   free(bitarray);
 }
-
 /* --------------------------------------------------------------------------
  * bitarray_cleanup_lut_manager
  *
@@ -641,13 +638,14 @@ bitarray_reverse_naive(bitarray_t* const bitarray,
   }
 }
 /* --------------------------------------------------------------------------
- * bitarray_reverse_block_swap
+ * bitarray_reverse_block_wise
  *
- * Block-swap algorithm for very large arrays. Uses word-level operations
- * for better cache locality compared to triple-reverse.
+ * Block-wise reversal algorithm for very large arrays. Uses 64-bit chunks
+ * for better cache locality and memory access patterns compared to naive
+ * bit-by-bit reversal. This is NOT the Block Swap rotation algorithm.
  */
 static inline void
-bitarray_reverse_block_swap(bitarray_t* const bitarray,
+bitarray_reverse_block_wise(bitarray_t* const bitarray,
                            const size_t start_idx,
                            const size_t end_idx)
 {
@@ -761,10 +759,10 @@ bitarray_reverse_lut(bitarray_t* const bitarray,
   const size_t num_bytes = (bitarray->bit_sz + 7u) >> 3;
   const size_t total_bits = end_idx - start_idx + 1u;
 
-  // For very large arrays, use block-swap algorithm for better cache locality
-  if (total_bits >= LARGE_LUT_THRESHOLD) {
-    // Use block-swap for large arrays (256K+ bits) - optimal threshold
-    bitarray_reverse_block_swap(bitarray, start_idx, end_idx);
+  // For extremely large arrays, use block-wise reversal for better cache locality
+  if (total_bits >= (2 * ULTRA_LUT_THRESHOLD)) {
+    // Use block-wise reversal for extremely large arrays (200M+ bits)
+    bitarray_reverse_block_wise(bitarray, start_idx, end_idx);
     return;
   }
 
@@ -908,6 +906,36 @@ bitarray_reverse_lut(bitarray_t* const bitarray,
       }
       break;
     }
+    case LUT_TYPE_4096BIT: {
+      // 4096-bit LUT strategy for extreme arrays
+      size_t pos = start_idx;
+      while (pos < end_idx) {
+        size_t remaining = end_idx - pos + 1;
+        size_t chunk_size = (remaining >= 4096) ? 4096 : remaining;
+        
+        uint4096_t chunk = read_u4096_bits(buf, num_bytes, pos);
+        uint4096_t reversed = reverse_u4096_bits(chunk);
+        write_u4096_bits(buf, num_bytes, pos, reversed);
+        
+        pos += chunk_size;
+      }
+      break;
+    }
+    case LUT_TYPE_8192BIT: {
+      // 8192-bit LUT strategy for ultra arrays
+      size_t pos = start_idx;
+      while (pos < end_idx) {
+        size_t remaining = end_idx - pos + 1;
+        size_t chunk_size = (remaining >= 8192) ? 8192 : remaining;
+        
+        uint8192_t chunk = read_u8192_bits(buf, num_bytes, pos);
+        uint8192_t reversed = reverse_u8192_bits(chunk);
+        write_u8192_bits(buf, num_bytes, pos, reversed);
+        
+        pos += chunk_size;
+      }
+      break;
+    }
     case LUT_TYPE_8BIT:
     default: {
       // Fall back to naive bit-by-bit for very small arrays
@@ -930,10 +958,6 @@ bitarray_reverse_lut(bitarray_t* const bitarray,
     }
   }
 }
-
-
-
-
 /* --------------------------------------------------------------------------
  * read_u64_bits
  */
@@ -1010,7 +1034,6 @@ write_u64_bits(uint8_t* const buf,
                                        (overflow & second_mask));
     }
 }
-
 /* --------------------------------------------------------------------------
  * read_u128_bits
  */
@@ -1057,7 +1080,6 @@ read_u128_bits(const uint8_t* const buf,
     
     return result;
 }
-
 /* --------------------------------------------------------------------------
  * write_u128_bits
  */
@@ -1107,9 +1129,6 @@ write_u128_bits(uint8_t* const buf,
                                        (overflow & second_mask));
     }
 }
-
-
-
 /* --------------------------------------------------------------------------
  * read_u512_bits
  */
@@ -1275,7 +1294,6 @@ write_u512_bits(uint8_t* const buf,
                                        (overflow & second_mask));
     }
 }
-
 /* --------------------------------------------------------------------------
  * reverse_u128_bits
  */
@@ -1305,8 +1323,6 @@ reverse_u128_bits(uint128_t value)
     
     return result;
 }
-
-
 /* --------------------------------------------------------------------------
  * reverse_u512_bits
  */
@@ -1401,7 +1417,6 @@ reverse_u512_bits(uint512_t value)
     
     return result;
 }
-
 /* --------------------------------------------------------------------------
  * modulo
  */
@@ -1422,8 +1437,6 @@ bitmask(const size_t bit_index)
 {
   return 1 << (bit_index % 8);
 }
-
-
 /* --------------------------------------------------------------------------
  * lut_manager_init
  *
@@ -1449,10 +1462,11 @@ lut_manager_init(void)
     lut_manager_add_entry(manager, CACHE_LINE_LUT_THRESHOLD, LUT_TYPE_512BIT);
     lut_manager_add_entry(manager, HUGE_LUT_THRESHOLD, LUT_TYPE_1024BIT);
     lut_manager_add_entry(manager, MASSIVE_LUT_THRESHOLD, LUT_TYPE_2048BIT);
+    lut_manager_add_entry(manager, EXTREME_LUT_THRESHOLD, LUT_TYPE_4096BIT);
+    lut_manager_add_entry(manager, ULTRA_LUT_THRESHOLD, LUT_TYPE_8192BIT);
     
     return manager;
 }
-
 /* --------------------------------------------------------------------------
  * lut_manager_destroy
  *
@@ -1468,7 +1482,6 @@ lut_manager_destroy(lut_manager_t* manager)
     // No dynamic allocations to free in cache-based approach
     free(manager);
 }
-
 /* --------------------------------------------------------------------------
  * lut_manager_add_entry
  *
@@ -1491,7 +1504,6 @@ lut_manager_add_entry(lut_manager_t* manager, size_t bit_count, lut_type_t type)
     
     manager->cache_head++;
 }
-
 /* --------------------------------------------------------------------------
  * lut_manager_find_entry
  *
@@ -1522,7 +1534,6 @@ lut_manager_find_entry(lut_manager_t* manager, size_t bit_count)
     
     return best_entry;
 }
-
 /* --------------------------------------------------------------------------
  * lut_manager_get_type
  *
@@ -1538,7 +1549,6 @@ lut_manager_get_type(lut_manager_t* manager, size_t bit_count)
     lut_hash_entry_t* entry = lut_manager_find_entry(manager, bit_count);
     return entry->lut_type;
 }
-
 /* --------------------------------------------------------------------------
  * lut_manager_get_lut_size
  *
@@ -1548,19 +1558,19 @@ static size_t
 lut_manager_get_lut_size(lut_type_t type)
 {
     switch (type) {
-        case LUT_TYPE_8BIT:   return 256 * sizeof(uint8_t);
-        case LUT_TYPE_32BIT:  return 256 * sizeof(uint32_t);
-        case LUT_TYPE_64BIT:  return 256 * sizeof(uint64_t);
-        case LUT_TYPE_128BIT: return 256 * sizeof(uint128_t);
-        case LUT_TYPE_256BIT: return 256 * sizeof(uint256_t);
-        case LUT_TYPE_512BIT: return 256 * sizeof(uint512_t);
+        case LUT_TYPE_8BIT:    return 256 * sizeof(uint8_t);
+        case LUT_TYPE_32BIT:   return 256 * sizeof(uint32_t);
+        case LUT_TYPE_64BIT:   return 256 * sizeof(uint64_t);
+        case LUT_TYPE_128BIT:  return 256 * sizeof(uint128_t);
+        case LUT_TYPE_256BIT:  return 256 * sizeof(uint256_t);
+        case LUT_TYPE_512BIT:  return 256 * sizeof(uint512_t);
         case LUT_TYPE_1024BIT: return 256 * sizeof(uint1024_t);
         case LUT_TYPE_2048BIT: return 256 * sizeof(uint2048_t);
-        default:              return 256 * sizeof(uint8_t);
+        case LUT_TYPE_4096BIT: return 256 * sizeof(uint4096_t);
+        case LUT_TYPE_8192BIT: return 256 * sizeof(uint8192_t);
+        default:               return 256 * sizeof(uint8_t);
     }
 }
-
-
 /* --------------------------------------------------------------------------
  * read_u1024_bits
  *
@@ -1581,7 +1591,6 @@ read_u1024_bits(const uint8_t* buf, size_t num_bytes, size_t bit_pos)
     
     return result;
 }
-
 /* --------------------------------------------------------------------------
  * write_u1024_bits
  *
@@ -1597,7 +1606,6 @@ write_u1024_bits(uint8_t* buf, size_t num_bytes, size_t bit_pos, uint1024_t valu
         }
     }
 }
-
 /* --------------------------------------------------------------------------
  * reverse_u1024_bits
  *
@@ -1625,7 +1633,6 @@ reverse_u1024_bits(uint1024_t value)
     
     return result;
 }
-
 /* --------------------------------------------------------------------------
  * read_u2048_bits
  *
@@ -1646,7 +1653,6 @@ read_u2048_bits(const uint8_t* buf, size_t num_bytes, size_t bit_pos)
     
     return result;
 }
-
 /* --------------------------------------------------------------------------
  * write_u2048_bits
  *
@@ -1662,7 +1668,6 @@ write_u2048_bits(uint8_t* buf, size_t num_bytes, size_t bit_pos, uint2048_t valu
         }
     }
 }
-
 /* --------------------------------------------------------------------------
  * reverse_u2048_bits
  *
@@ -1687,6 +1692,132 @@ reverse_u2048_bits(uint2048_t value)
         }
         
         result.chunk[31 - i] = reversed_chunk;
+    }
+    
+    return result;
+}
+/* --------------------------------------------------------------------------
+ * read_u4096_bits
+ *
+ * Read 4096 bits starting at an arbitrary bit position.
+ * Returns a uint4096_t structure with the bits.
+ */
+static uint4096_t
+read_u4096_bits(const uint8_t* buf, size_t num_bytes, size_t bit_pos)
+{
+    uint4096_t result = {0};
+    
+    for (size_t i = 0; i < 64; i++) {
+        size_t chunk_bit_pos = bit_pos + (i * 64);
+        if (chunk_bit_pos < num_bytes * 8) {
+            result.chunk[i] = read_u64_bits(buf, num_bytes, chunk_bit_pos);
+        }
+    }
+    
+    return result;
+}
+/* --------------------------------------------------------------------------
+ * write_u4096_bits
+ *
+ * Write 4096 bits starting at an arbitrary bit position.
+ */
+static void
+write_u4096_bits(uint8_t* buf, size_t num_bytes, size_t bit_pos, uint4096_t value)
+{
+    for (size_t i = 0; i < 64; i++) {
+        size_t chunk_bit_pos = bit_pos + (i * 64);
+        if (chunk_bit_pos < num_bytes * 8) {
+            write_u64_bits(buf, num_bytes, chunk_bit_pos, value.chunk[i]);
+        }
+    }
+}
+/* --------------------------------------------------------------------------
+ * reverse_u4096_bits
+ *
+ * Reverse the bits in a 4096-bit value using the LUT.
+ */
+static uint4096_t
+reverse_u4096_bits(uint4096_t value)
+{
+    uint4096_t result = {0};
+    
+    // Use the 4096-bit LUT for efficient reversal
+    // Process 8-bit chunks and use LUT
+    for (size_t i = 0; i < 64; i++) {
+        uint64_t chunk = value.chunk[i];
+        uint64_t reversed_chunk = 0;
+        
+        // Process 8 bytes in the chunk
+        for (size_t j = 0; j < 8; j++) {
+            uint8_t byte_val = (chunk >> (j * 8)) & 0xFF;
+            uint8_t reversed_byte = bit_reverse_table256[byte_val];
+            reversed_chunk |= ((uint64_t)reversed_byte) << ((7 - j) * 8);
+        }
+        
+        result.chunk[63 - i] = reversed_chunk;
+    }
+    
+    return result;
+}
+/* --------------------------------------------------------------------------
+ * read_u8192_bits
+ *
+ * Read 8192 bits starting at an arbitrary bit position.
+ * Returns a uint8192_t structure with the bits.
+ */
+static uint8192_t
+read_u8192_bits(const uint8_t* buf, size_t num_bytes, size_t bit_pos)
+{
+    uint8192_t result = {0};
+    
+    for (size_t i = 0; i < 128; i++) {
+        size_t chunk_bit_pos = bit_pos + (i * 64);
+        if (chunk_bit_pos < num_bytes * 8) {
+            result.chunk[i] = read_u64_bits(buf, num_bytes, chunk_bit_pos);
+        }
+    }
+    
+    return result;
+}
+/* --------------------------------------------------------------------------
+ * write_u8192_bits
+ *
+ * Write 8192 bits starting at an arbitrary bit position.
+ */
+static void
+write_u8192_bits(uint8_t* buf, size_t num_bytes, size_t bit_pos, uint8192_t value)
+{
+    for (size_t i = 0; i < 128; i++) {
+        size_t chunk_bit_pos = bit_pos + (i * 64);
+        if (chunk_bit_pos < num_bytes * 8) {
+            write_u64_bits(buf, num_bytes, chunk_bit_pos, value.chunk[i]);
+        }
+    }
+}
+/* --------------------------------------------------------------------------
+ * reverse_u8192_bits
+ *
+ * Reverse the bits in a 8192-bit value using the LUT.
+ */
+static uint8192_t
+reverse_u8192_bits(uint8192_t value)
+{
+    uint8192_t result = {0};
+    
+    // Use the 8192-bit LUT for efficient reversal
+    // Process 8-bit chunks and use LUT
+    for (size_t i = 0; i < 128; i++) {
+        uint64_t chunk = value.chunk[i];
+        uint64_t reversed_chunk = 0;
+        
+        // Process 8 bytes in the chunk
+        for (size_t j = 0; j < 8; j++) {
+            uint8_t byte_val = (chunk >> (j * 8)) & 0xFF;
+            uint8_t reversed_byte = bit_reverse_table256[byte_val];
+            reversed_chunk |= ((uint64_t)reversed_byte) << ((7 - j) * 8);
+        }
+        
+        result.chunk[127 - i] = reversed_chunk;
     }
     
     return result;
