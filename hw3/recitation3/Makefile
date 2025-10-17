@@ -15,7 +15,7 @@ V ?= 1
 
 ifeq ($(VECTORIZE),1)
   #CFLAGS += -ftree-vectorizer-verbose=$(V)
-  CFLAGS += -Rpass=loop-vectorize -Rpass-missed=loop-vectorize 
+  CFLAGS += -Rpass=loop-vectorize -Rpass-missed=loop-vectorize -ffast-math
 else
   CFLAGS += -fno-vectorize
 endif
