@@ -1,4 +1,4 @@
-## `-ffast-math` re-ordering vs IEE 754
+## `-ffast-math` re-ordering vs IEEE 754
 
 **Write-up 5**: Check the assembly and verify that it does in fact
 vectorize properly. Also what do you notice when you run the command
