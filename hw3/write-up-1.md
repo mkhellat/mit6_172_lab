@@ -5,8 +5,7 @@ to set the start index at −216 and adds to it for each memory
 access. Why doesn’t it set the start index to 0 and use small positive
 offsets?
 
-### What is the register that stores the `for` loop indexiing variable
-    `i`?
+### What is the register that stores the `for` loop indexiing variable `i`?
 
 Looking at the provided assembly snippet, the 64-bit register `%rax`
 holds the for loop indexing variable `-i` and is set to `-1L << 16` at
@@ -183,8 +182,7 @@ The thing is that `xorl %eax, %eax` (3 bytes) is shorter than `xorq
 
 ---
 
-### Why is the compiler implementing a countdown lop instead of the
-    original loop?
+### Why is the compiler implementing a countdown loop instead of the original loop?
 
 Well, I had to cheat and research about it. This is a clever compiler
 optimization called **"strength reduction"** or a **"countdown
