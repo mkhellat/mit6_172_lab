@@ -89,7 +89,7 @@ which lead to assembly code:
 
 ### 2. **Why 16-byte Alignment Failed**
 
-When you used `__builtin_assume_aligned(a, 16)`:
+When we used `__builtin_assume_aligned(a, 16)`:
 
 ```c
 // This tells compiler: "a points to 16-byte aligned data"
