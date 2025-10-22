@@ -1,4 +1,13 @@
-## **Write-up 7: Assembly Code Analysis**
+## **Assembly Code Analysis**
+
+**Write-up 7**: Compare the contents of loop.s when the `VECTORIZE` ﬂag is set/not set. Which
+instruction (copy its text here) is responsible for the vector add operation? Which
+instruction (copy its text here) is responsible for the vector add operation when you
+additionally pass `AVX2=1`? You can ﬁnd an x86 instruction manual on LMOD. Look for
+MMX and SSE2 instructions, which are vector operations. To make the assembly code more
+readable it may be a good idea to remove debug symbols from release builds by moving the
+`-g` and `-gdwarf-3` CFLAGS in your Makeﬁle. It might also be a good idea to turn off loop
+unrolling with the `-fno-unroll-loops` ﬂag while you study the assembly code.
 
 ### **Comparison of Assembly Code**
 
