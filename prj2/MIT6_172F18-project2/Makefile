@@ -53,9 +53,14 @@ PRODUCT = screensaver
 PROFILE_PRODUCT = $(PRODUCT:%=%.prof) #the product, instrumented for gprof
 
 # What we're building with
-CXX = clang
-CXXFLAGS = -std=gnu99 -Wall -ftapir
-LDFLAGS = -lrt -lm -lcilkrts
+# Use OpenCilk compiler which automatically generates Tapir IR for Cilk constructs
+CXX = /opt/opencilk-2/bin/clang
+# -fopencilk enables OpenCilk extensions and configures Tapir backend automatically
+# Alternative: -ftapir=cilk (explicit Tapir backend selection, usually not needed)
+CXXFLAGS = -std=gnu99 -Wall -fopencilk
+# OpenCilk runtime linking: When using -fopencilk, the compiler handles runtime linking
+# automatically, so we don't need explicit -lopencilk. Just keep standard libs.
+LDFLAGS = -lrt -lm
 
 include ./cilkutils.mk
 
@@ -91,12 +96,13 @@ clean:
 	$(CXX) $(CXXFLAGS) $(EXTRA_CXXFLAGS) -o $@ -c $<
 
 # How to link the product
+# Pass -fopencilk to linker so it automatically links OpenCilk runtime
 $(PRODUCT): LDFLAGS += -lXext -lX11
 $(PRODUCT):	$(PRODUCT_OBJECTS) graphic_stuff.o
-	$(CXX) $(LDFLAGS) $(EXTRA_LDFLAGS) -o $@ $(PRODUCT_OBJECTS) graphic_stuff.o
+	$(CXX) -fopencilk $(LDFLAGS) $(EXTRA_LDFLAGS) -o $@ $(PRODUCT_OBJECTS) graphic_stuff.o
 
 # How to build the product, instrumented for profiling
 $(PROFILE_PRODUCT): CXXFLAGS += -DPROFILE_BUILD -pg
 $(PROFILE_PRODUCT): LDFLAGS += -pg
 $(PROFILE_PRODUCT): $(PRODUCT_OBJECTS)
-	$(CXX)  $(PRODUCT_OBJECTS) $(LDFLAGS) $(EXTRA_LDFLAGS) -o $(PROFILE_PRODUCT)
+	$(CXX) -fopencilk $(PRODUCT_OBJECTS) $(LDFLAGS) $(EXTRA_LDFLAGS) -o $(PROFILE_PRODUCT)
