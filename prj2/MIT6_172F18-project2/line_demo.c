@@ -133,3 +133,13 @@ bool LineDemo_update(LineDemo* lineDemo) {
   }
   return true;
 }
+
+void LineDemo_setUseQuadtree(LineDemo* lineDemo, bool useQuadtree) {
+  // Forward the configuration to the underlying CollisionWorld.
+  // This wrapper function provides a clean interface at the LineDemo level,
+  // hiding the implementation detail that collision detection happens in
+  // the CollisionWorld component.
+  assert(lineDemo != NULL);
+  assert(lineDemo->collisionWorld != NULL);
+  CollisionWorld_setUseQuadtree(lineDemo->collisionWorld, useQuadtree);
+}

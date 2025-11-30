@@ -45,6 +45,11 @@ CollisionWorld* CollisionWorld_new(const unsigned int capacity) {
   collisionWorld->timeStep = 0.5;
   collisionWorld->lines = malloc(capacity * sizeof(Line*));
   collisionWorld->numOfLines = 0;
+  
+  // Initialize collision detection algorithm to brute-force by default.
+  // Can be changed later via CollisionWorld_setUseQuadtree().
+  collisionWorld->useQuadtree = false;
+  
   return collisionWorld;
 }
 
@@ -127,30 +132,43 @@ void CollisionWorld_lineWallCollision(CollisionWorld* collisionWorld) {
 void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
   IntersectionEventList intersectionEventList = IntersectionEventList_make();
 
-  // Test all line-line pairs to see if they will intersect before the
-  // next time step.
-  for (int i = 0; i < collisionWorld->numOfLines; i++) {
-    Line *l1 = collisionWorld->lines[i];
-
-    for (int j = i + 1; j < collisionWorld->numOfLines; j++) {
-      Line *l2 = collisionWorld->lines[j];
-
-      // intersect expects compareLines(l1, l2) < 0 to be true.
-      // Swap l1 and l2, if necessary.
-      if (compareLines(l1, l2) >= 0) {
-        Line *temp = l1;
-        l1 = l2;
-        l2 = temp;
-      }
-
-      IntersectionType intersectionType =
+  // Choose collision detection algorithm based on configuration.
+  // The useQuadtree flag is set via CollisionWorld_setUseQuadtree(),
+  // typically based on command-line arguments (e.g., -q flag).
+  if (!collisionWorld->useQuadtree) {
+    // BRUTE-FORCE ALGORITHM: O(n^2) pairwise collision detection.
+    // Test all line-line pairs to see if they will intersect before the
+    // next time step. Simple but can be slow for large numbers of lines.
+    for (int i = 0; i < collisionWorld->numOfLines; i++) {
+      Line *l1 = collisionWorld->lines[i];
+  
+      for (int j = i + 1; j < collisionWorld->numOfLines; j++) {
+	Line *l2 = collisionWorld->lines[j];
+  
+	// intersect expects compareLines(l1, l2) < 0 to be true.
+	// Swap l1 and l2, if necessary.
+	if (compareLines(l1, l2) >= 0) {
+	  Line *temp = l1;
+	  l1 = l2;
+	  l2 = temp;
+	}
+  
+	IntersectionType intersectionType =
           intersect(l1, l2, collisionWorld->timeStep);
-      if (intersectionType != NO_INTERSECTION) {
-        IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
-                                         intersectionType);
-        collisionWorld->numLineLineCollisions++;
+	if (intersectionType != NO_INTERSECTION) {
+	  IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
+					   intersectionType);
+	  collisionWorld->numLineLineCollisions++;
+	}
       }
     }
+  }
+  else {
+    // QUADTREE ALGORITHM: Spatial partitioning for optimized collision detection.
+    // Uses hierarchical space subdivision to reduce the number of pairwise
+    // comparisons needed. More efficient for large numbers of lines.
+    printf("Deploying quadtree...\n");
+    // TODO: Implement quadtree-based collision detection here.
   }
 
   // Sort the intersection event list.
@@ -266,4 +284,13 @@ void CollisionWorld_collisionSolver(CollisionWorld* collisionWorld,
                          Vec_multiply(face, v2Face));
 
   return;
+}
+
+void CollisionWorld_setUseQuadtree(CollisionWorld* collisionWorld,
+                                   bool useQuadtree) {
+  // Configure the collision detection algorithm.
+  // This should be called after CollisionWorld_new() and before running
+  // the simulation, typically based on command-line flags.
+  assert(collisionWorld != NULL);
+  collisionWorld->useQuadtree = useQuadtree;
 }

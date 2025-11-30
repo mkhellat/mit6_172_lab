@@ -24,6 +24,8 @@
 #ifndef LINEDEMO_H_
 #define LINEDEMO_H_
 
+#include <stdbool.h>
+
 #include "./line.h"
 #include "./collision_world.h"
 
@@ -67,5 +69,12 @@ unsigned int LineDemo_getNumLineLineCollisions(LineDemo* lineDemo);
 bool LineDemo_update(LineDemo* lineDemo);
 
 void LineDemo_setInputFile(char* input_file_path);
+
+// Configure the collision detection algorithm.
+// When useQuadtree is true, enables quadtree-based spatial partitioning
+// for improved performance. When false, uses standard brute-force detection.
+// This should be called after LineDemo_initLine() (which creates the
+// CollisionWorld) and before starting the simulation.
+void LineDemo_setUseQuadtree(LineDemo* lineDemo, bool useQuadtree);
 
 #endif  // LINEDEMO_H_

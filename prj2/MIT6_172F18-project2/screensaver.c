@@ -54,20 +54,28 @@ int main(int argc, char *argv[]) {
 #ifndef PROFILE_BUILD
   bool graphicDemoFlag = false;
 #endif
+  // Flag to indicate whether to use quadtree-based collision detection.
+  // Set to true if -q command-line flag is provided.
+  bool useQuadtree = false;
   unsigned int numFrames = 1;
   extern int optind;
 
   // Process command line options.
-  while ((optchar = getopt(argc, argv, "gi")) != -1) {
+  while ((optchar = getopt(argc, argv, "giq")) != -1) {
     switch (optchar) {
-      case 'g':
+    case 'g':
 #ifndef PROFILE_BUILD
-        graphicDemoFlag = true;
+      graphicDemoFlag = true;
 #endif
-        break;
-      default:
-        printf("Ignoring unrecognized option: %c\n", optchar);
-        continue;
+      break;
+    case 'q':
+      // Enable quadtree-based collision detection algorithm.
+      // This flag will be passed to the LineDemo after initialization.
+      useQuadtree = true;
+      break;
+    default:
+      printf("Ignoring unrecognized option: %c\n", optchar);
+      continue;
     }
   }
 
@@ -79,7 +87,8 @@ int main(int argc, char *argv[]) {
 
   // Check to make sure number of arguments is correct.
   if (remaining_args < 1) {
-    printf("Usage: %s [-g] <numFrames> [inputfile]\n", argv[0]);
+    printf("Usage: %s [-q] [-g] <numFrames> [inputfile]\n", argv[0]);
+    printf("  -q : detect collision using quadtree\n");
     printf("  -g : show graphics\n");
     exit(-1);
   }
@@ -99,6 +108,16 @@ int main(int argc, char *argv[]) {
   LineDemo_setInputFile(input_file_path);
   LineDemo_initLine(lineDemo);
   LineDemo_setNumFrames(lineDemo, numFrames);
+
+  // Configure collision detection algorithm based on command-line flag.
+  // Must be called after LineDemo_initLine() since that's when the
+  // CollisionWorld is created and allocated.
+  if (useQuadtree) {
+    LineDemo_setUseQuadtree(lineDemo, true);
+    printf("Quadtree collision detection enabled.\n");
+  } else {
+    printf("Using brute-force collision detection.\n");
+  }
 
   const fasttime_t start_time = gettime();
 

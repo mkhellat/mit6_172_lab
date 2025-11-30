@@ -24,6 +24,8 @@
 #ifndef COLLISIONWORLD_H_
 #define COLLISIONWORLD_H_
 
+#include <stdbool.h>
+
 #include "./line.h"
 #include "./intersection_detection.h"
 
@@ -41,6 +43,11 @@ struct CollisionWorld {
 
   // Record the total number of line-line intersections.
   unsigned int numLineLineCollisions;
+
+  // Flag to enable quadtree-based collision detection algorithm.
+  // When true, uses quadtree spatial partitioning for optimization.
+  // When false (default), uses brute-force O(n^2) collision detection.
+  bool useQuadtree;
 };
 typedef struct CollisionWorld CollisionWorld;
 
@@ -84,5 +91,12 @@ unsigned int CollisionWorld_getNumLineLineCollisions(
 void CollisionWorld_collisionSolver(CollisionWorld* collisionWorld, Line *l1,
                                     Line *l2,
                                     IntersectionType intersectionType);
+
+// Set the collision detection algorithm to use.
+// When useQuadtree is true, enables quadtree-based spatial partitioning
+// for improved performance on large numbers of lines.
+// When false, uses the standard brute-force pairwise collision detection.
+void CollisionWorld_setUseQuadtree(CollisionWorld* collisionWorld,
+                                   bool useQuadtree);
 
 #endif  // COLLISIONWORLD_H_
