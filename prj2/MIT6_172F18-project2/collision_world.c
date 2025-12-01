@@ -31,6 +31,7 @@
 #include "./intersection_detection.h"
 #include "./intersection_event_list.h"
 #include "./line.h"
+#include "./quadtree.h"
 
 CollisionWorld* CollisionWorld_new(const unsigned int capacity) {
   assert(capacity > 0);
@@ -167,10 +168,125 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
     // QUADTREE ALGORITHM: Spatial partitioning for optimized collision detection.
     // Uses hierarchical space subdivision to reduce the number of pairwise
     // comparisons needed. More efficient for large numbers of lines.
-    printf("Deploying quadtree...\n");
-    // TODO: Implement quadtree-based collision detection here.
+    // 
+    // Algorithm:
+    // 1. Build quadtree from current line positions
+    // 2. Query tree to find candidate pairs (spatially close lines)
+    // 3. Test candidates using existing intersect() function
+    // 4. Result: Same collisions as brute-force, but O(n log n) instead of O(n²)
+    
+    // Create quadtree with world bounds
+    QuadTreeError error;
+    QuadTreeConfig config = QuadTreeConfig_default();
+    // Enable debug stats for performance analysis (can be disabled in production)
+    config.enableDebugStats = false;  // Set to true for debugging
+    
+    QuadTree* tree = QuadTree_create(BOX_XMIN, BOX_XMAX,
+                                      BOX_YMIN, BOX_YMAX,
+                                      &config, &error);
+    if (tree == NULL) {
+      // If quadtree creation fails, fall back to brute-force
+      fprintf(stderr, "Warning: Quadtree creation failed (%s), "
+              "falling back to brute-force algorithm.\n",
+              QuadTree_errorString(error));
+      // Fall through to brute-force algorithm below
+    } else {
+      // Build quadtree from lines
+      error = QuadTree_build(tree, collisionWorld->lines,
+                            collisionWorld->numOfLines,
+                            collisionWorld->timeStep);
+      if (error != QUADTREE_SUCCESS) {
+        fprintf(stderr, "Warning: Quadtree build failed (%s), "
+                "falling back to brute-force algorithm.\n",
+                QuadTree_errorString(error));
+        QuadTree_destroy(tree);
+        tree = NULL;  // Signal to use brute-force
+      }
+    }
+    
+    if (tree != NULL) {
+      // Find candidate pairs using spatial queries
+      QuadTreeCandidateList candidateList;
+      error = QuadTreeCandidateList_init(&candidateList, 0);
+      if (error != QUADTREE_SUCCESS) {
+        fprintf(stderr, "Warning: Candidate list initialization failed (%s), "
+                "falling back to brute-force algorithm.\n",
+                QuadTree_errorString(error));
+        QuadTree_destroy(tree);
+        tree = NULL;  // Signal to use brute-force
+      } else {
+        error = QuadTree_findCandidatePairs(tree, collisionWorld->timeStep,
+                                           &candidateList);
+        if (error != QUADTREE_SUCCESS) {
+          fprintf(stderr, "Warning: Candidate pair query failed (%s), "
+                  "falling back to brute-force algorithm.\n",
+                  QuadTree_errorString(error));
+          QuadTreeCandidateList_destroy(&candidateList);
+          QuadTree_destroy(tree);
+          tree = NULL;  // Signal to use brute-force
+        } else {
+          // Test candidate pairs using existing intersect() function
+          // This is the TEST PHASE: spatial filtering already done in query phase
+          for (unsigned int i = 0; i < candidateList.count; i++) {
+            Line* l1 = candidateList.pairs[i].line1;
+            Line* l2 = candidateList.pairs[i].line2;
+            
+            // Ensure compareLines(l1, l2) < 0 (quadtree should guarantee this,
+            // but double-check for safety)
+            if (compareLines(l1, l2) >= 0) {
+              Line* temp = l1;
+              l1 = l2;
+              l2 = temp;
+            }
+            
+            // Use existing collision detection function
+            IntersectionType intersectionType =
+                intersect(l1, l2, collisionWorld->timeStep);
+            if (intersectionType != NO_INTERSECTION) {
+              IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
+                                               intersectionType);
+              collisionWorld->numLineLineCollisions++;
+            }
+          }
+          
+          // Cleanup - quadtree succeeded
+          QuadTreeCandidateList_destroy(&candidateList);
+          QuadTree_destroy(tree);
+          tree = NULL;  // Mark as processed (prevents fallback)
+        }
+      }
+    }
+    
+    // Fallback to brute-force if quadtree failed at any stage
+    // (tree will be NULL if any step failed)
+    if (tree == NULL) {
+      // BRUTE-FORCE ALGORITHM: Fallback if quadtree fails
+      for (int i = 0; i < collisionWorld->numOfLines; i++) {
+        Line *l1 = collisionWorld->lines[i];
+        
+        for (int j = i + 1; j < collisionWorld->numOfLines; j++) {
+          Line *l2 = collisionWorld->lines[j];
+          
+          // intersect expects compareLines(l1, l2) < 0 to be true.
+          // Swap l1 and l2, if necessary.
+          if (compareLines(l1, l2) >= 0) {
+            Line *temp = l1;
+            l1 = l2;
+            l2 = temp;
+          }
+          
+          IntersectionType intersectionType =
+              intersect(l1, l2, collisionWorld->timeStep);
+          if (intersectionType != NO_INTERSECTION) {
+            IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
+                                             intersectionType);
+            collisionWorld->numLineLineCollisions++;
+          }
+        }
+      }
+    }
   }
-
+  
   // Sort the intersection event list.
   IntersectionEventNode* startNode = intersectionEventList.head;
   while (startNode != NULL) {
