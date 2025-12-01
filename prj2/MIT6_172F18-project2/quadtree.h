@@ -113,9 +113,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-// Forward declarations
-struct Line;
-typedef struct Line Line;
+// Include line.h since we use Line types in the public API
+#include "./line.h"
 
 /**
  * Error codes returned by quadtree functions.
@@ -242,6 +241,11 @@ typedef struct {
   // made square by taking the larger dimension)
   double worldXmin, worldXmax;
   double worldYmin, worldYmax;
+  
+  // Lines stored in tree (for query phase - need to iterate over all lines)
+  // This is set during QuadTree_build() and used during query phase
+  Line** lines;                 // Array of all lines (not owned by tree)
+  unsigned int numLines;        // Number of lines
 } QuadTree;
 
 /**
