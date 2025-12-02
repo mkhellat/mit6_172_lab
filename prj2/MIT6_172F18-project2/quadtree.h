@@ -246,6 +246,9 @@ typedef struct {
   // This is set during QuadTree_build() and used during query phase
   Line** lines;                 // Array of all lines (not owned by tree)
   unsigned int numLines;        // Number of lines
+  
+  // Time step used during build (needed for correct redistribution during subdivision)
+  double buildTimeStep;         // Time step from QuadTree_build()
 } QuadTree;
 
 /**

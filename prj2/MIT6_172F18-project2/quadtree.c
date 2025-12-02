@@ -517,10 +517,13 @@ static QuadTreeError insertLineRecursive(QuadNode* node,
       node->isLeaf = false;
       
       // Redistribute existing lines to children
+      // CRITICAL: Use the same timeStep that was used during initial build
+      // This ensures bounding boxes are computed consistently
       for (unsigned int i = 0; i < node->numLines; i++) {
         Line* existingLine = node->lines[i];
         double exmin, exmax, eymin, eymax;
-        computeLineBoundingBox(existingLine, 0.0, &exmin, &exmax,
+        // Use the timeStep from build phase (stored in tree structure)
+        computeLineBoundingBox(existingLine, tree->buildTimeStep, &exmin, &exmax,
                                &eymin, &eymax);
         
         for (int j = 0; j < 4; j++) {
@@ -570,6 +573,7 @@ QuadTreeError QuadTree_build(QuadTree* tree,
   // Store lines array for query phase (we don't own these, just reference)
   tree->lines = lines;
   tree->numLines = numLines;
+  tree->buildTimeStep = timeStep;  // Store for use during subdivision
   
   // Reset statistics if enabled
   if (tree->stats != NULL) {
