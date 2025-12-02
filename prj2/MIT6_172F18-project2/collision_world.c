@@ -133,6 +133,14 @@ void CollisionWorld_lineWallCollision(CollisionWorld* collisionWorld) {
 void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
   IntersectionEventList intersectionEventList = IntersectionEventList_make();
 
+  // Debug: Track pairs tested (only in debug builds)
+  #ifdef DEBUG_COLLISIONS
+  static unsigned long long bruteForcePairsTested = 0;
+  static unsigned long long quadtreePairsTested = 0;
+  static unsigned long long bruteForceCollisionsFound = 0;
+  static unsigned long long quadtreeCollisionsFound = 0;
+  #endif
+
   // Choose collision detection algorithm based on configuration.
   // The useQuadtree flag is set via CollisionWorld_setUseQuadtree(),
   // typically based on command-line arguments (e.g., -q flag).
@@ -156,10 +164,16 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
   
 	IntersectionType intersectionType =
           intersect(l1, l2, collisionWorld->timeStep);
+	#ifdef DEBUG_COLLISIONS
+	bruteForcePairsTested++;
+	#endif
 	if (intersectionType != NO_INTERSECTION) {
 	  IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
 					   intersectionType);
 	  collisionWorld->numLineLineCollisions++;
+	  #ifdef DEBUG_COLLISIONS
+	  bruteForceCollisionsFound++;
+	  #endif
 	}
       }
     }
@@ -174,6 +188,9 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
     // 2. Query tree to find candidate pairs (spatially close lines)
     // 3. Test candidates using existing intersect() function
     // 4. Result: Same collisions as brute-force, but O(n log n) instead of O(n²)
+    
+    // Flag to track if quadtree succeeded (so we don't run fallback)
+    bool quadtreeSucceeded = false;
     
     // Create quadtree with world bounds
     QuadTreeError error;
@@ -225,9 +242,80 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           QuadTree_destroy(tree);
           tree = NULL;  // Signal to use brute-force
         } else {
+          // Debug: Print candidate pair count and check for duplicates
+          static int callCount = 0;
+          callCount++;
+          unsigned long long expectedPairs = ((unsigned long long)collisionWorld->numOfLines * 
+                                             (collisionWorld->numOfLines - 1)) / 2;
+          
+          // Check for duplicates in candidate list (by pointer and by ID)
+          unsigned int duplicateCount = 0;
+          unsigned int duplicateByIdCount = 0;
+          for (unsigned int i = 0; i < candidateList.count; i++) {
+            for (unsigned int j = i + 1; j < candidateList.count; j++) {
+              // Check by pointer
+              if ((candidateList.pairs[i].line1 == candidateList.pairs[j].line1 &&
+                   candidateList.pairs[i].line2 == candidateList.pairs[j].line2) ||
+                  (candidateList.pairs[i].line1 == candidateList.pairs[j].line2 &&
+                   candidateList.pairs[i].line2 == candidateList.pairs[j].line1)) {
+                duplicateCount++;
+              }
+              // Check by ID (same IDs but different pointers = problem!)
+              if ((candidateList.pairs[i].line1->id == candidateList.pairs[j].line1->id &&
+                   candidateList.pairs[i].line2->id == candidateList.pairs[j].line2->id) ||
+                  (candidateList.pairs[i].line1->id == candidateList.pairs[j].line2->id &&
+                   candidateList.pairs[i].line2->id == candidateList.pairs[j].line1->id)) {
+                if (candidateList.pairs[i].line1 != candidateList.pairs[j].line1 ||
+                    candidateList.pairs[i].line2 != candidateList.pairs[j].line2) {
+                  duplicateByIdCount++;
+                  if (duplicateByIdCount <= 5) {
+                    fprintf(stderr, "DEBUG: Duplicate by ID: (%u,%u) pointers differ\n",
+                            candidateList.pairs[i].line1->id, candidateList.pairs[i].line2->id);
+                  }
+                }
+              }
+            }
+          }
+          
+          // Debug output disabled for production (can enable with DEBUG_QUADTREE)
+          #ifdef DEBUG_QUADTREE
+          fprintf(stderr, "DEBUG [call %d]: Quadtree found %u candidate pairs (brute-force tests %llu pairs, ratio: %.2f%%, duplicates: %u)\n",
+                  callCount, candidateList.count, expectedPairs, 
+                  (candidateList.count * 100.0) / (expectedPairs > 0 ? expectedPairs : 1),
+                  duplicateCount);
+          #endif
+          
           // Test candidate pairs using existing intersect() function
           // This is the TEST PHASE: spatial filtering already done in query phase
+          #ifdef DEBUG_COLLISIONS
+          quadtreePairsTested += candidateList.count;
+          #endif
+          
+          // Track which pairs we've tested to detect duplicates in candidate list
+          bool* pairTested = calloc(candidateList.count, sizeof(bool));
+          unsigned int duplicateTests = 0;
+          
           for (unsigned int i = 0; i < candidateList.count; i++) {
+            // Check if we've already tested this exact pair (by pointer)
+            for (unsigned int j = 0; j < i; j++) {
+              if ((candidateList.pairs[i].line1 == candidateList.pairs[j].line1 &&
+                   candidateList.pairs[i].line2 == candidateList.pairs[j].line2) ||
+                  (candidateList.pairs[i].line1 == candidateList.pairs[j].line2 &&
+                   candidateList.pairs[i].line2 == candidateList.pairs[j].line1)) {
+                duplicateTests++;
+                if (duplicateTests <= 5) {
+                  fprintf(stderr, "WARNING: Testing duplicate candidate pair #%u: (%u, %u) - same as pair #%u\n",
+                          i, candidateList.pairs[i].line1->id, candidateList.pairs[i].line2->id, j);
+                }
+                pairTested[i] = true;  // Mark as duplicate, skip testing
+                break;
+              }
+            }
+            
+            if (pairTested[i]) {
+              continue;  // Skip duplicate
+            }
+            
             Line* l1 = candidateList.pairs[i].line1;
             Line* l2 = candidateList.pairs[i].line2;
             
@@ -246,20 +334,27 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
               IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
                                                intersectionType);
               collisionWorld->numLineLineCollisions++;
+              #ifdef DEBUG_COLLISIONS
+              quadtreeCollisionsFound++;
+              #endif
             }
           }
           
           // Cleanup - quadtree succeeded
+          free(pairTested);
           QuadTreeCandidateList_destroy(&candidateList);
           QuadTree_destroy(tree);
-          tree = NULL;  // Mark as processed (prevents fallback)
+          quadtreeSucceeded = true;  // Mark success - do NOT run fallback
         }
+        // If query failed, tree is already NULL, fall through to fallback
       }
+      // If candidate list init failed, tree is already NULL, fall through to fallback
     }
+    // If build failed or tree creation failed, tree is NULL, fall through to fallback
     
-    // Fallback to brute-force if quadtree failed at any stage
-    // (tree will be NULL if any step failed)
-    if (tree == NULL) {
+    // Fallback to brute-force ONLY if quadtree was attempted but failed
+    // (do NOT run if quadtree succeeded)
+    if (!quadtreeSucceeded) {
       // BRUTE-FORCE ALGORITHM: Fallback if quadtree fails
       for (int i = 0; i < collisionWorld->numOfLines; i++) {
         Line *l1 = collisionWorld->lines[i];
@@ -287,6 +382,22 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
     }
   }
   
+  // Debug: Compare event lists between algorithms (only for box.in investigation)
+  #ifdef DEBUG_BOX_IN
+  static int frameCount = 0;
+  frameCount++;
+  if (frameCount >= 90 && frameCount <= 95) {
+    unsigned int eventCount = 0;
+    IntersectionEventNode* temp = intersectionEventList.head;
+    while (temp != NULL) {
+      eventCount++;
+      temp = temp->next;
+    }
+    fprintf(stderr, "DEBUG [frame %d]: Event list has %u events before sorting\n", 
+            frameCount, eventCount);
+  }
+  #endif
+  
   // Sort the intersection event list.
   IntersectionEventNode* startNode = intersectionEventList.head;
   while (startNode != NULL) {
@@ -303,7 +414,7 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
     }
     startNode = startNode->next;
   }
-
+  
   // Call the collision solver for each intersection event.
   IntersectionEventNode* curNode = intersectionEventList.head;
 

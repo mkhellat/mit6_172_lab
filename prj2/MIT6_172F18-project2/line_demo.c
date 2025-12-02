@@ -126,11 +126,13 @@ unsigned int LineDemo_getNumLineLineCollisions(LineDemo* lineDemo) {
 
 // The main simulation loop
 bool LineDemo_update(LineDemo* lineDemo) {
-  lineDemo->count++;
-  CollisionWorld_updateLines(lineDemo->collisionWorld);
-  if (lineDemo->count > lineDemo->numFrames) {
+  // Check if we've completed all frames BEFORE incrementing
+  // This ensures we run exactly numFrames iterations
+  if (lineDemo->count >= lineDemo->numFrames) {
     return false;
   }
+  lineDemo->count++;
+  CollisionWorld_updateLines(lineDemo->collisionWorld);
   return true;
 }
 

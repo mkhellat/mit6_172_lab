@@ -31,6 +31,7 @@
 #include <string.h>
 #include <math.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include "./line.h"
 #include "./vec.h"
@@ -694,16 +695,67 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     return QUADTREE_ERROR_MALLOC_FAILED;
   }
   
+  // Find max line ID to allocate pair tracking matrix
+  unsigned int maxLineId = 0;
+  for (unsigned int i = 0; i < tree->numLines; i++) {
+    if (tree->lines[i] != NULL && tree->lines[i]->id > maxLineId) {
+      maxLineId = tree->lines[i]->id;
+    }
+  }
+  
+  // Allocate a 2D boolean matrix to track all pairs we've seen globally
+  // This ensures we never add the same pair twice, regardless of processing order
+  // Matrix is upper triangular (only pairs where id1 < id2 are stored)
+  // Access pattern: seenPairs[minId][maxId] for pair (minId, maxId)
+  bool** seenPairs = calloc(maxLineId + 1, sizeof(bool*));
+  if (seenPairs == NULL) {
+    free(overlappingCells);
+    return QUADTREE_ERROR_MALLOC_FAILED;
+  }
+  for (unsigned int i = 0; i <= maxLineId; i++) {
+    seenPairs[i] = calloc(maxLineId + 1, sizeof(bool));
+    if (seenPairs[i] == NULL) {
+      // Clean up already allocated rows
+      for (unsigned int j = 0; j < i; j++) {
+        free(seenPairs[j]);
+      }
+      free(seenPairs);
+      free(overlappingCells);
+      return QUADTREE_ERROR_MALLOC_FAILED;
+    }
+  }
+  
   // Track statistics
   unsigned int totalCellsChecked = 0;
   unsigned int totalPairsFound = 0;
   
   // For each line, find overlapping cells and collect candidate pairs
+  // IMPORTANT: We iterate through tree->lines, but we need to ensure we don't
+  // process the same line multiple times if it appears in tree->lines multiple times
   for (unsigned int i = 0; i < tree->numLines; i++) {
     Line* line1 = tree->lines[i];
     if (line1 == NULL) {
       continue;
     }
+    
+    // Check if we've already processed this line1 in a previous iteration
+    // (in case tree->lines has duplicates)
+    bool alreadyProcessed = false;
+    for (unsigned int k = 0; k < i; k++) {
+      if (tree->lines[k] == line1) {
+        alreadyProcessed = true;
+        break;
+      }
+    }
+    if (alreadyProcessed) {
+      #ifdef DEBUG_QUADTREE
+      fprintf(stderr, "DEBUG: Skipping duplicate line1 (id=%u) at index %u\n", 
+              line1->id, i);
+      #endif
+      continue;  // Already processed this line
+    }
+    
+    // No need to reset - we use a global matrix that persists across iterations
     
     // Compute line's bounding box
     double lineXmin, lineXmax, lineYmin, lineYmax;
@@ -717,6 +769,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
                                                   overlappingCells, 0,
                                                   maxCellsPerLine);
     if (numCells < 0) {
+      // Clean up pair tracking matrix
+      for (unsigned int i = 0; i <= maxLineId; i++) {
+        free(seenPairs[i]);
+      }
+      free(seenPairs);
       free(overlappingCells);
       return QUADTREE_ERROR_MALLOC_FAILED;
     }
@@ -724,57 +781,73 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     totalCellsChecked += (unsigned int)numCells;
     
     // Collect all OTHER lines from these cells
-    // Use a simple set to avoid duplicate pairs (line1.id < line2.id)
+    // Only consider pairs where line1.id < line2.id (matches brute-force)
     for (int cellIdx = 0; cellIdx < numCells; cellIdx++) {
       QuadNode* cell = overlappingCells[cellIdx];
       
       for (unsigned int j = 0; j < cell->numLines; j++) {
         Line* line2 = cell->lines[j];
         
-        // Only consider pairs where line1.id < line2.id (avoid duplicates)
-        // This matches the brute-force algorithm's approach
-        if (line2 == NULL || line1->id >= line2->id) {
+        // Skip NULL lines, self, and lines with id <= line1->id
+        if (line2 == NULL || line2 == line1 || line1->id >= line2->id) {
           continue;
         }
         
-        // Check if this pair is already in candidate list
-        bool alreadyAdded = false;
-        for (unsigned int k = 0; k < candidateList->count; k++) {
-          if ((candidateList->pairs[k].line1 == line1 &&
-               candidateList->pairs[k].line2 == line2) ||
-              (candidateList->pairs[k].line1 == line2 &&
-               candidateList->pairs[k].line2 == line1)) {
-            alreadyAdded = true;
-            break;
-          }
+        // Check if we've already added this pair globally
+        // (line2 might appear in multiple cells, or we might process lines in different order)
+        // Use min/max IDs to access upper triangular matrix
+        unsigned int minId = line1->id;
+        unsigned int maxId = line2->id;
+        if (maxId > maxLineId) {
+          // This shouldn't happen, but handle gracefully
+          continue;
+        }
+        if (seenPairs[minId][maxId]) {
+          // DEBUG: This should never happen if our logic is correct
+          #ifdef DEBUG_QUADTREE
+          fprintf(stderr, "WARNING: Duplicate pair detected! (%u, %u) - line1 id=%u, line2 id=%u, cellIdx=%d\n", 
+                  minId, maxId, line1->id, line2->id, cellIdx);
+          #endif
+          continue;  // Already added this pair
         }
         
-        if (!alreadyAdded) {
-          // Grow candidate list if needed
-          if (candidateList->count >= candidateList->capacity) {
-            unsigned int newCapacity = candidateList->capacity * 2;
-            QuadTreeCandidatePair* newPairs = realloc(
-                candidateList->pairs,
-                newCapacity * sizeof(QuadTreeCandidatePair));
-            if (newPairs == NULL) {
-              free(overlappingCells);
-              return QUADTREE_ERROR_MALLOC_FAILED;
-            }
-            candidateList->pairs = newPairs;
-            candidateList->capacity = newCapacity;
-          }
-          
-          // Add candidate pair (ensure line1.id < line2.id)
-          if (line1->id < line2->id) {
-            candidateList->pairs[candidateList->count].line1 = line1;
-            candidateList->pairs[candidateList->count].line2 = line2;
-          } else {
-            candidateList->pairs[candidateList->count].line1 = line2;
-            candidateList->pairs[candidateList->count].line2 = line1;
-          }
-          candidateList->count++;
-          totalPairsFound++;
+        // Mark as seen BEFORE adding to list (critical for correctness)
+        seenPairs[minId][maxId] = true;
+        
+        #ifdef DEBUG_QUADTREE
+        // Verify the matrix was actually set
+        if (!seenPairs[minId][maxId]) {
+          fprintf(stderr, "ERROR: Matrix not set correctly! (%u, %u)\n", minId, maxId);
         }
+        #endif
+        
+        // Grow candidate list if needed
+        if (candidateList->count >= candidateList->capacity) {
+          unsigned int newCapacity = candidateList->capacity * 2;
+          if (newCapacity == 0) {
+            newCapacity = DEFAULT_CANDIDATE_CAPACITY;
+          }
+          QuadTreeCandidatePair* newPairs = realloc(
+              candidateList->pairs,
+              newCapacity * sizeof(QuadTreeCandidatePair));
+          if (newPairs == NULL) {
+            // Clean up pair tracking matrix
+            for (unsigned int i = 0; i <= maxLineId; i++) {
+              free(seenPairs[i]);
+            }
+            free(seenPairs);
+            free(overlappingCells);
+            return QUADTREE_ERROR_MALLOC_FAILED;
+          }
+          candidateList->pairs = newPairs;
+          candidateList->capacity = newCapacity;
+        }
+        
+        // Add candidate pair (line1.id < line2.id is guaranteed by check above)
+        candidateList->pairs[candidateList->count].line1 = line1;
+        candidateList->pairs[candidateList->count].line2 = line2;
+        candidateList->count++;
+        totalPairsFound++;
       }
     }
   }
@@ -782,6 +855,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   // Update statistics
   updateStatsOnQuery(tree, totalCellsChecked, totalPairsFound);
   
+  // Free pair tracking matrix
+  for (unsigned int i = 0; i <= maxLineId; i++) {
+    free(seenPairs[i]);
+  }
+  free(seenPairs);
   free(overlappingCells);
   return QUADTREE_SUCCESS;
 }
