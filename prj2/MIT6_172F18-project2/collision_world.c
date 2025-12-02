@@ -322,13 +322,13 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           // NOTE: Duplicate checking removed - quadtree.c already prevents duplicates
           // using seenPairs matrix. The previous O(n^2) duplicate check was a major
           // performance bottleneck that negated the quadtree's benefits.
+          
+          // Debug output disabled for production (can enable with DEBUG_QUADTREE)
+          #ifdef DEBUG_QUADTREE
           static int callCount = 0;
           callCount++;
           unsigned long long expectedPairs = ((unsigned long long)collisionWorld->numOfLines * 
                                              (collisionWorld->numOfLines - 1)) / 2;
-          
-          // Debug output disabled for production (can enable with DEBUG_QUADTREE)
-          #ifdef DEBUG_QUADTREE
           fprintf(stderr, "DEBUG [call %d]: Quadtree found %u candidate pairs (brute-force tests %llu pairs, ratio: %.2f%%)\n",
                   callCount, candidateList.count, expectedPairs, 
                   (candidateList.count * 100.0) / (expectedPairs > 0 ? expectedPairs : 1));
