@@ -170,7 +170,15 @@ static void updateStatsOnQuery(QuadTree* tree,
 QuadTreeConfig QuadTreeConfig_default(void) {
   QuadTreeConfig config;
   config.maxDepth = 12;
-  config.maxLinesPerNode = 4;
+  // CRITICAL: For clustered inputs like smalllines.in, we need to INCREASE maxLinesPerNode.
+  // When lines are clustered, subdividing too aggressively (small maxLinesPerNode) creates
+  // many small cells that hit the minCellSize limit quickly. All clustered lines then
+  // accumulate in those small cells, leading to O(n^2) behavior during query.
+  // By increasing maxLinesPerNode, we allow more lines per cell before subdividing,
+  // which means cells stay larger longer and can subdivide more effectively when needed.
+  // Value of 32 provides good balance: allows effective subdivision for clustered inputs
+  // while still maintaining spatial filtering benefits.
+  config.maxLinesPerNode = 32;
   config.minCellSize = 0.001;
   config.enableDebugStats = false;
   return config;
@@ -466,10 +474,17 @@ static QuadTreeError insertLineRecursive(QuadNode* node,
   
   // If this is a leaf node
   if (node->isLeaf) {
-    // Check if we should subdivide
+    // CRITICAL FIX: Add line FIRST, then check if we need to subdivide
+    // This matches the standard quadtree insertion algorithm
+    QuadTreeError result = addLineToNode(node, line);
+    if (result != QUADTREE_SUCCESS) {
+      return result;
+    }
+    
+    // Now check if we should subdivide (AFTER adding the line)
     bool shouldSubdivide = false;
     
-    if (node->numLines >= tree->config.maxLinesPerNode &&
+    if (node->numLines > tree->config.maxLinesPerNode &&
         node->depth < (int)tree->config.maxDepth) {
       // Check if cell is large enough to subdivide
       double cellWidth = node->xmax - node->xmin;
@@ -532,19 +547,18 @@ static QuadTreeError insertLineRecursive(QuadNode* node,
         }
       }
       
-      // Clear parent's line list (lines now in children)
+      // Clear parent's line list (lines now in children, including the new one)
       node->numLines = 0;
+      
+      // All lines (including the new one) have been redistributed to children
+      return QUADTREE_SUCCESS;
     } else {
-      // Just add line to this leaf node
-      QuadTreeError result = addLineToNode(node, line);
-      if (result != QUADTREE_SUCCESS) {
-        return result;
-      }
+      // Line already added above, no subdivision needed
       return QUADTREE_SUCCESS;
     }
   }
   
-  // If we reach here, node is not a leaf (or was just subdivided)
+  // If we reach here, node is not a leaf (and was NOT just subdivided)
   // Recursively insert into children
   for (int i = 0; i < 4; i++) {
     QuadTreeError result = insertLineRecursive(node->children[i], line,
@@ -677,6 +691,18 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     return QUADTREE_ERROR_NULL_POINTER;
   }
   
+  // CRITICAL: Verify timeStep matches buildTimeStep for consistency
+  // The query phase must use the same timeStep as the build phase
+  // to ensure bounding boxes are computed consistently
+  if (fabs(timeStep - tree->buildTimeStep) > 1e-10) {
+    #ifdef DEBUG_QUADTREE
+    fprintf(stderr, "WARNING: timeStep mismatch! buildTimeStep=%.10f, query timeStep=%.10f\n",
+            tree->buildTimeStep, timeStep);
+    #endif
+    // Use buildTimeStep to ensure consistency
+    // (The parameter is kept for API compatibility, but we use buildTimeStep internally)
+  }
+  
   if (candidateList == NULL) {
     return QUADTREE_ERROR_NULL_POINTER;
   }
@@ -734,36 +760,27 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   unsigned int totalPairsFound = 0;
   
   // For each line, find overlapping cells and collect candidate pairs
-  // IMPORTANT: We iterate through tree->lines, but we need to ensure we don't
-  // process the same line multiple times if it appears in tree->lines multiple times
+  // NOTE: We assume tree->lines has no duplicates (lines are inserted once during build)
+  // If duplicates exist, they would be caught by the seenPairs matrix anyway
   for (unsigned int i = 0; i < tree->numLines; i++) {
     Line* line1 = tree->lines[i];
     if (line1 == NULL) {
       continue;
     }
     
-    // Check if we've already processed this line1 in a previous iteration
-    // (in case tree->lines has duplicates)
-    bool alreadyProcessed = false;
-    for (unsigned int k = 0; k < i; k++) {
-      if (tree->lines[k] == line1) {
-        alreadyProcessed = true;
-        break;
-      }
-    }
-    if (alreadyProcessed) {
-      #ifdef DEBUG_QUADTREE
-      fprintf(stderr, "DEBUG: Skipping duplicate line1 (id=%u) at index %u\n", 
-              line1->id, i);
-      #endif
-      continue;  // Already processed this line
-    }
+    // CRITICAL FIX: Removed O(n^2) duplicate line check
+    // The previous implementation checked all previous lines for each line,
+    // resulting in O(n^2) complexity that negated quadtree benefits.
+    // We trust that tree->lines has no duplicates (lines inserted once during build),
+    // and the seenPairs matrix will catch any duplicate pairs anyway.
     
     // No need to reset - we use a global matrix that persists across iterations
     
     // Compute line's bounding box
+    // CRITICAL: Use buildTimeStep to match the timeStep used during build phase
+    // This ensures bounding boxes are computed consistently between build and query
     double lineXmin, lineXmax, lineYmin, lineYmax;
-    computeLineBoundingBox(line1, timeStep,
+    computeLineBoundingBox(line1, tree->buildTimeStep,
                            &lineXmin, &lineXmax, &lineYmin, &lineYmax);
     
     // Find all cells this line overlaps

@@ -33,6 +33,37 @@
 #include "./line.h"
 #include "./quadtree.h"
 
+// Comparison function for qsort to sort candidate pairs
+// Matches brute-force processing order: by line1->id, then line2->id
+static int compareCandidatePairs(const void* a, const void* b) {
+  const QuadTreeCandidatePair* pairA = (const QuadTreeCandidatePair*)a;
+  const QuadTreeCandidatePair* pairB = (const QuadTreeCandidatePair*)b;
+  
+  Line* l1_a = pairA->line1;
+  Line* l2_a = pairA->line2;
+  Line* l1_b = pairB->line1;
+  Line* l2_b = pairB->line2;
+  
+  // Ensure pairs are normalized (line1->id < line2->id)
+  if (compareLines(l1_a, l2_a) >= 0) {
+    Line* temp = l1_a;
+    l1_a = l2_a;
+    l2_a = temp;
+  }
+  if (compareLines(l1_b, l2_b) >= 0) {
+    Line* temp = l1_b;
+    l1_b = l2_b;
+    l2_b = temp;
+  }
+  
+  // Compare: first by line1->id, then by line2->id
+  int cmp1 = compareLines(l1_a, l1_b);
+  if (cmp1 != 0) {
+    return cmp1;
+  }
+  return compareLines(l2_a, l2_b);
+}
+
 CollisionWorld* CollisionWorld_new(const unsigned int capacity) {
   assert(capacity > 0);
 
@@ -241,7 +272,7 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
     QuadTreeError error;
     QuadTreeConfig config = QuadTreeConfig_default();
     // Enable debug stats for performance analysis (can be disabled in production)
-    config.enableDebugStats = false;  // Set to true for debugging
+    config.enableDebugStats = true;  // Set to true for debugging
     
     QuadTree* tree = QuadTree_create(BOX_XMIN, BOX_XMAX,
                                       BOX_YMIN, BOX_YMAX,
@@ -287,48 +318,32 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           QuadTree_destroy(tree);
           tree = NULL;  // Signal to use brute-force
         } else {
-          // Debug: Print candidate pair count and check for duplicates
+          // Debug: Print candidate pair count (for performance analysis)
+          // NOTE: Duplicate checking removed - quadtree.c already prevents duplicates
+          // using seenPairs matrix. The previous O(n^2) duplicate check was a major
+          // performance bottleneck that negated the quadtree's benefits.
           static int callCount = 0;
           callCount++;
           unsigned long long expectedPairs = ((unsigned long long)collisionWorld->numOfLines * 
                                              (collisionWorld->numOfLines - 1)) / 2;
           
-          // Check for duplicates in candidate list (by pointer and by ID)
-          unsigned int duplicateCount = 0;
-          unsigned int duplicateByIdCount = 0;
-          for (unsigned int i = 0; i < candidateList.count; i++) {
-            for (unsigned int j = i + 1; j < candidateList.count; j++) {
-              // Check by pointer
-              if ((candidateList.pairs[i].line1 == candidateList.pairs[j].line1 &&
-                   candidateList.pairs[i].line2 == candidateList.pairs[j].line2) ||
-                  (candidateList.pairs[i].line1 == candidateList.pairs[j].line2 &&
-                   candidateList.pairs[i].line2 == candidateList.pairs[j].line1)) {
-                duplicateCount++;
-              }
-              // Check by ID (same IDs but different pointers = problem!)
-              if ((candidateList.pairs[i].line1->id == candidateList.pairs[j].line1->id &&
-                   candidateList.pairs[i].line2->id == candidateList.pairs[j].line2->id) ||
-                  (candidateList.pairs[i].line1->id == candidateList.pairs[j].line2->id &&
-                   candidateList.pairs[i].line2->id == candidateList.pairs[j].line1->id)) {
-                if (candidateList.pairs[i].line1 != candidateList.pairs[j].line1 ||
-                    candidateList.pairs[i].line2 != candidateList.pairs[j].line2) {
-                  duplicateByIdCount++;
-                  if (duplicateByIdCount <= 5) {
-                    fprintf(stderr, "DEBUG: Duplicate by ID: (%u,%u) pointers differ\n",
-                            candidateList.pairs[i].line1->id, candidateList.pairs[i].line2->id);
-                  }
-                }
-              }
-            }
-          }
-          
           // Debug output disabled for production (can enable with DEBUG_QUADTREE)
           #ifdef DEBUG_QUADTREE
-          fprintf(stderr, "DEBUG [call %d]: Quadtree found %u candidate pairs (brute-force tests %llu pairs, ratio: %.2f%%, duplicates: %u)\n",
+          fprintf(stderr, "DEBUG [call %d]: Quadtree found %u candidate pairs (brute-force tests %llu pairs, ratio: %.2f%%)\n",
                   callCount, candidateList.count, expectedPairs, 
-                  (candidateList.count * 100.0) / (expectedPairs > 0 ? expectedPairs : 1),
-                  duplicateCount);
+                  (candidateList.count * 100.0) / (expectedPairs > 0 ? expectedPairs : 1));
           #endif
+          
+          // Sort candidate pairs to match brute-force processing order
+          // This ensures collisions are processed in the same order as brute-force,
+          // which should reduce discrepancies due to processing order differences
+          // Sort by line1->id, then line2->id (matching brute-force nested loop order)
+          // CRITICAL: Use qsort (O(n log n)) instead of bubble sort (O(n^2))
+          // to avoid negating the quadtree's performance benefits
+          if (candidateList.count > 0) {
+            qsort(candidateList.pairs, candidateList.count, 
+                  sizeof(QuadTreeCandidatePair), compareCandidatePairs);
+          }
           
           // Test candidate pairs using existing intersect() function
           // This is the TEST PHASE: spatial filtering already done in query phase
@@ -364,31 +379,9 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           }
           #endif
           
-          // Track which pairs we've tested to detect duplicates in candidate list
-          bool* pairTested = calloc(candidateList.count, sizeof(bool));
-          unsigned int duplicateTests = 0;
-          
+          // Test candidate pairs - quadtree.c already prevents duplicates using seenPairs matrix
+          // No need for additional duplicate checking here
           for (unsigned int i = 0; i < candidateList.count; i++) {
-            // Check if we've already tested this exact pair (by pointer)
-            for (unsigned int j = 0; j < i; j++) {
-              if ((candidateList.pairs[i].line1 == candidateList.pairs[j].line1 &&
-                   candidateList.pairs[i].line2 == candidateList.pairs[j].line2) ||
-                  (candidateList.pairs[i].line1 == candidateList.pairs[j].line2 &&
-                   candidateList.pairs[i].line2 == candidateList.pairs[j].line1)) {
-                duplicateTests++;
-                if (duplicateTests <= 5) {
-                  fprintf(stderr, "WARNING: Testing duplicate candidate pair #%u: (%u, %u) - same as pair #%u\n",
-                          i, candidateList.pairs[i].line1->id, candidateList.pairs[i].line2->id, j);
-                }
-                pairTested[i] = true;  // Mark as duplicate, skip testing
-                break;
-              }
-            }
-            
-            if (pairTested[i]) {
-              continue;  // Skip duplicate
-            }
-            
             Line* l1 = candidateList.pairs[i].line1;
             Line* l2 = candidateList.pairs[i].line2;
             
@@ -413,8 +406,16 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
             }
           }
           
+          // Debug: Print quadtree statistics for performance analysis
+          #ifdef DEBUG_QUADTREE_STATS
+          static int statsFrameCount = 0;
+          statsFrameCount++;
+          if (statsFrameCount == 1) {
+            QuadTree_printDebugStats(tree);
+          }
+          #endif
+          
           // Cleanup - quadtree succeeded
-          free(pairTested);
           QuadTreeCandidateList_destroy(&candidateList);
           QuadTree_destroy(tree);
           quadtreeSucceeded = true;  // Mark success - do NOT run fallback
