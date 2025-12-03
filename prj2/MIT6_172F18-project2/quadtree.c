@@ -116,6 +116,23 @@ static void computeLineBoundingBox(const Line* line, double timeStep,
                     minDouble(p1_future.y, p2_future.y));
   *ymax = maxDouble(maxDouble(p1_current.y, p2_current.y),
                     maxDouble(p1_future.y, p2_future.y));
+  
+  // CRITICAL FIX: Expand bounding box slightly to account for:
+  // 1. Numerical precision errors (lines very close to cell boundaries)
+  // 2. Swept parallelogram area (moving line segments sweep out area)
+  // 3. Edge cases near cell boundaries (e.g., Line 105 was 0.000414 from boundary)
+  // 
+  // Without this expansion, lines that should be in overlapping cells
+  // end up in non-overlapping cells, causing quadtree to miss candidate pairs.
+  // 
+  // Epsilon value: 0.0005 (half of 0.001) is approximately 0.06% of typical
+  // cell size (~0.008 at depth 6). This is small enough to avoid significant
+  // false positives but large enough to handle numerical precision issues.
+  const double epsilon = 0.0005;
+  *xmin -= epsilon;
+  *xmax += epsilon;
+  *ymin -= epsilon;
+  *ymax += epsilon;
 }
 
 /**
