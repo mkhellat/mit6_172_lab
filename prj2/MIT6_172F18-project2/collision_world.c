@@ -377,7 +377,7 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
         tree = NULL;  // Signal to use brute-force
       } else {
         error = QuadTree_findCandidatePairs(tree, collisionWorld->timeStep,
-                                           &candidateList);
+                                           &candidateList, debugFrameCount);
         if (error != QUADTREE_SUCCESS) {
           fprintf(stderr, "Warning: Candidate pair query failed (%s), "
                   "falling back to brute-force algorithm.\n",

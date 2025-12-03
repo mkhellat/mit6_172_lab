@@ -488,7 +488,8 @@ QuadTreeError QuadTree_build(QuadTree* tree,
  */
 QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
                                           double timeStep,
-                                          QuadTreeCandidateList* candidateList);
+                                          QuadTreeCandidateList* candidateList,
+                                          int frameNumber);
 
 /**
  * Initialize a candidate list (allocate initial capacity).
