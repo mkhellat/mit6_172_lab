@@ -1,0 +1,51 @@
+================================================================================
+DISCREPANCY ANALYSIS - FILE INVENTORY
+================================================================================
+
+DOCUMENTATION FILES
+-------------------
+✓ README.md                    - Directory overview and structure
+✓ INDEX.md                     - File index and navigation guide
+✓ INVESTIGATION_REPORT.md      - Full investigation report
+✓ STATISTICS.txt               - Summary statistics
+✓ FILE_INVENTORY.txt           - This file
+
+RAW DATA FILES
+--------------
+✓ pair_101_105_bf.txt         - BF raw data for pair (101,105)
+✓ pair_101_105_qt.txt         - QT raw data for pair (101,105)
+✓ line_105_collisions_bf.txt  - All BF collisions involving line 105
+✓ line_105_collisions_qt.txt  - All QT collisions involving line 105
+✓ line_105_analysis.txt       - Summary analysis
+
+HISTORY FILES (history_files/)
+------------------------------
+✓ pair_101_105_bf_history.txt - BF history of pair (101,105)
+✓ pair_101_105_qt_history.txt - QT history of pair (101,105)
+
+COMPARISON FILES (comparison_files/)
+------------------------------------
+✓ pair_101_105_comparison.txt           - Frame-by-frame comparison
+✓ line_105_collision_comparison.txt    - Detailed collision comparison
+
+SCRIPTS (scripts/)
+------------------
+✓ create_comparison.py         - Python comparison script
+✓ extract_comparison.sh        - Shell extraction script
+✓ extract_history.sh           - History extraction script
+✓ debug_discrepancy.sh        - Automated debugging
+✓ benchmark.sh                 - Performance benchmarking
+✓ performance_test.sh          - Performance testing
+✓ profile_quadtree.sh          - Profiling script
+✓ test_cutoff.sh               - Cutoff testing script
+✓ README.md                    - Scripts documentation
+✓ SCRIPTS_SUMMARY.txt          - Scripts summary
+
+DEBUG LOGS (debug_logs/)
+------------------------
+✓ debug_bf_pairs.txt          - All pairs tested by BF (718MB)
+✓ debug_bf_collisions.txt     - All collisions found by BF
+✓ debug_qt_pairs.txt          - All pairs tested by QT (44MB)
+✓ debug_qt_collisions.txt     - All collisions found by QT
+
+TOTAL FILES: 26

@@ -1,0 +1,66 @@
+================================================================================
+ANALYSIS SCRIPTS SUMMARY
+================================================================================
+
+SCRIPTS USED IN DISCREPANCY INVESTIGATION
+-------------------------------------------
+
+1. create_comparison.py
+   - Purpose: Compare physical quantities between BF and QT
+   - Input: pair_101_105_bf.txt, pair_101_105_qt.txt
+   - Output: pair_101_105_comparison.txt
+   - Language: Python 3
+
+2. extract_history.sh
+   - Purpose: Extract and organize history files
+   - Creates: History and comparison files
+   - Language: Bash
+
+3. debug_discrepancy.sh
+   - Purpose: Automated discrepancy debugging
+   - Features: Compares collisions, finds differences
+   - Language: Bash
+
+PERFORMANCE TESTING SCRIPTS
+----------------------------
+
+4. benchmark.sh
+   - Purpose: Performance benchmarking
+   - Tests: Multiple inputs, calculates speedup
+   - Language: Bash
+
+5. performance_test.sh
+   - Purpose: Complexity pattern analysis
+   - Features: Statistical analysis, multiple runs
+   - Language: Bash
+
+6. profile_quadtree.sh
+   - Purpose: Profiling quadtree implementation
+   - Features: Function-level profiling
+   - Language: Bash
+
+7. test_cutoff.sh
+   - Purpose: Test different maxLinesPerNode values
+   - Features: Automated cutoff testing
+   - Language: Bash
+
+EXECUTION FLOW FOR INVESTIGATION
+---------------------------------
+
+1. Compile with debug flags:
+   make CXXFLAGS="-std=gnu99 -Wall -fopencilk -O3 -DNDEBUG -DDEBUG_DISCREPANCY"
+
+2. Run simulations:
+   ./screensaver 100 input/box.in > /dev/null 2>&1
+   ./screensaver -q 100 input/box.in > /dev/null 2>&1
+
+3. Extract data:
+   grep "FRAME_.*101,105" debug_bf_pairs.txt > pair_101_105_bf.txt
+   grep "FRAME_.*101,105" debug_qt_pairs.txt > pair_101_105_qt.txt
+
+4. Create comparison:
+   python3 create_comparison.py > pair_101_105_comparison.txt
+
+5. Analyze collisions:
+   grep "105" debug_bf_collisions.txt > line_105_collisions_bf.txt
+   grep "105" debug_qt_collisions.txt > line_105_collisions_qt.txt

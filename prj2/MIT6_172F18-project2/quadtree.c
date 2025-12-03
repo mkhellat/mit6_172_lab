@@ -733,6 +733,15 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     }
   }
   
+  // Build a map from Line* to array index for O(1) lookup
+  // This allows us to quickly check if line2 appears later in array than line1
+  // We use a hash-like approach: since lines are pointers, we can't easily hash them,
+  // but we can do a linear search once per line2 (still O(n) per line2, but cached)
+  // Actually, let's build a proper map: array of (Line*, index) pairs, sorted by pointer
+  // Or simpler: just do the lookup, but cache results per line2
+  // Actually simplest: build an array indexed by line pointer... but pointers aren't small integers
+  // So we'll stick with the linear search but optimize it
+  
   // Allocate a 2D boolean matrix to track all pairs we've seen globally
   // This ensures we never add the same pair twice, regardless of processing order
   // Matrix is upper triangular (only pairs where id1 < id2 are stored)
@@ -802,15 +811,82 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     totalCellsChecked += (unsigned int)numCells;
     
     // Collect all OTHER lines from these cells
-    // Only consider pairs where line1.id < line2.id (matches brute-force)
+    // CRITICAL FIX: Only consider pairs that brute-force would also test.
+    // Brute-force tests all pairs (i,j) where i < j (array indices), then swaps.
+    // To match brute-force exactly, we need to ensure line2 comes from a later
+    // position in the array than line1, OR if line2 comes from an earlier position,
+    // we should have already tested it when line2 was line1.
+    // 
+    // However, since we're iterating through tree->lines in array order (i from 0 to numLines-1),
+    // and we only add pairs where line1->id < line2->id, we need to ensure that
+    // line2 actually appears later in the array than line1, OR that we've already
+    // processed line2 as line1 in a previous iteration.
+    //
+    // The simplest fix: Only add pairs where line2 appears later in tree->lines
+    // than line1. This ensures we test the same pairs as brute-force.
     for (int cellIdx = 0; cellIdx < numCells; cellIdx++) {
       QuadNode* cell = overlappingCells[cellIdx];
       
       for (unsigned int j = 0; j < cell->numLines; j++) {
         Line* line2 = cell->lines[j];
         
-        // Skip NULL lines, self, and lines with id <= line1->id
-        if (line2 == NULL || line2 == line1 || line1->id >= line2->id) {
+        // Skip NULL lines and self
+        if (line2 == NULL || line2 == line1) {
+          continue;
+        }
+        
+        #ifdef DEBUG_DISCREPANCY
+        // Log which cells contain pair (101,105) in frame 99
+        static int frame99Logged = 0;
+        if (line1->id == 101 && line2->id == 105) {
+          if (!frame99Logged) {
+            fprintf(stderr, "DEBUG: Found pair (101,105) in cell [%.6f,%.6f) x [%.6f,%.6f) at depth %d\n",
+                    cell->xmin, cell->xmax, cell->ymin, cell->ymax, cell->depth);
+          }
+        }
+        if (line1->id == 105 && line2->id == 101) {
+          if (!frame99Logged) {
+            fprintf(stderr, "DEBUG: Found pair (101,105) in cell [%.6f,%.6f) x [%.6f,%.6f) at depth %d\n",
+                    cell->xmin, cell->xmax, cell->ymin, cell->ymax, cell->depth);
+          }
+        }
+        #endif
+        
+        // CRITICAL: Ensure line2 appears later in tree->lines than line1
+        // This matches brute-force's iteration order (i < j)
+        unsigned int line2ArrayIndex = 0;
+        bool line2Found = false;
+        for (unsigned int k = 0; k < tree->numLines; k++) {
+          if (tree->lines[k] == line2) {
+            line2ArrayIndex = k;
+            line2Found = true;
+            break;
+          }
+        }
+        if (!line2Found) {
+          // line2 is not in tree->lines - this shouldn't happen, but skip it
+          #ifdef DEBUG_DISCREPANCY
+          fprintf(stderr, "WARNING: line2 (id=%u) not found in tree->lines!\n", line2->id);
+          #endif
+          continue;
+        }
+        if (line2ArrayIndex <= i) {
+          // line2 appears before/at line1's position in the array
+          // Brute-force would test this as (line2, line1) when j < i, not (line1, line2)
+          // So we should skip it here to avoid double-testing
+          #ifdef DEBUG_DISCREPANCY
+          static unsigned long long filteredCount = 0;
+          filteredCount++;
+          if (filteredCount <= 10) {
+            fprintf(stderr, "DEBUG: Filtered pair (line1 id=%u at idx=%u, line2 id=%u at idx=%u) - line2 appears before line1\n",
+                    line1->id, i, line2->id, line2ArrayIndex);
+          }
+          #endif
+          continue;
+        }
+        
+        // Now ensure line1->id < line2->id (matches brute-force after swap)
+        if (line1->id >= line2->id) {
           continue;
         }
         

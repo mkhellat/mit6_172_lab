@@ -1,0 +1,87 @@
+================================================================================
+DISCREPANCY ANALYSIS STATISTICS
+================================================================================
+
+PAIR (101,105) ANALYSIS
+------------------------
+Total frames analyzed: 100
+BF tested in: 100 frames
+QT tested in: 98 frames
+Missing frames in QT: 89, 91
+
+Frames with matching quantities: 88 (frames 1-88)
+Frames with divergence: 11 (frames 90-100)
+First divergence: Frame 90
+
+Frame 99 result:
+  BF: NO_INTERSECTION (0)
+  QT: COLLISION (1) - FALSE POSITIVE
+
+LINE 105 COLLISION TALLY
+-------------------------
+Total collisions (all frames):
+  BF: 35 collisions
+  QT: 23 collisions
+  Difference: QT missed 12 collisions
+
+Frames 88-90 breakdown:
+  Frame 88:
+    BF: 3 collisions [(105,145), (105,149), (105,161)]
+    QT: 2 collisions [(105,145), (105,149)]
+    Missing: 1 collision [(105,161)]
+  
+  Frame 89 (CRITICAL):
+    BF: 9 collisions [(41,105), (45,105), (49,105), (53,105), 
+                      (57,105), (61,105), (65,105), (69,105), (93,105)]
+    QT: 1 collision [(105,137)]
+    Missing: 9 collisions
+    False positive: 1 collision [(105,137)]
+  
+  Frame 90:
+    BF: 4 collisions [(65,105), (73,105), (97,105), (105,129)]
+    QT: 1 collision [(105,137)]
+    Missing: 4 collisions
+    False positive: 1 collision [(105,137)]
+
+Cumulative (frames 88-90):
+  BF total: 16 collisions
+  QT total: 4 collisions
+  QT missed: 13 collisions
+  QT false positives: 2 collisions
+
+PHYSICS QUANTITIES DIVERGENCE
+------------------------------
+Frame 88 (last match):
+  l1_p1.x: BF=0.5241479610, QT=0.5241479610 ✓
+  l1_vel.x: BF=-0.0017040779, QT=-0.0017040779 ✓
+  l2_p1.x: BF=0.5235577776, QT=0.5235577776 ✓
+  l2_vel.x: BF=-0.0020369871, QT=-0.0020369871 ✓
+
+Frame 90 (first divergence):
+  l1_p1.x: BF=0.5239456480, QT=0.5239456480 ✓
+  l1_vel.x: BF=-0.0021050131, QT=-0.0021050131 ✓
+  l2_p1.x: BF=0.5252171048, QT=0.5220813320 ✗ (diff: 0.0031357728)
+  l2_vel.x: BF=-0.0019351863, QT=-0.0018860761 ✗ (diff: 0.0000491102)
+
+Frame 99 (maximum divergence):
+  l1_p1.x: BF=0.5336622681, QT=0.5300905191 ✗ (diff: 0.0035717490)
+  l1_vel.x: BF=0.0023983180, QT=0.0014128300 ✗ (diff: 0.0009854880)
+  l2_p1.x: BF=0.5305340845, QT=0.5289743279 ✗ (diff: 0.0015597566)
+  l2_vel.x: BF=0.0050995907, QT=0.0057589211 ✗ (diff: 0.0006593304)
+
+KEY FINDINGS
+------------
+1. Divergence starts at frame 90 due to different collision resolutions in frame 89
+2. QT missed 9 critical collisions in frame 89 that BF found
+3. QT found 1 false positive (105,137) in frames 89-90
+4. Line 105's velocity diverged due to different collision tallies
+5. Position divergence cascades from velocity divergence
+
+ROOT CAUSE
+----------
+The quadtree algorithm:
+- Fails to find many pairs that should be tested (spatial partitioning issue)
+- Finds pairs that shouldn't be tested (false positives)
+- Does not test all pairs that brute-force tests (array order issue)
+
+This leads to different collision resolutions, causing physics divergence.

@@ -33,6 +33,10 @@
 #include "./line.h"
 #include "./quadtree.h"
 
+// Debug flag for discrepancy investigation
+// When enabled, logs all pairs tested and collisions found to files
+#define DEBUG_DISCREPANCY 1
+
 // Comparison function for qsort to sort candidate pairs
 // Matches brute-force processing order: by line1->id, then line2->id
 static int compareCandidatePairs(const void* a, const void* b) {
@@ -172,6 +176,34 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
   static unsigned long long quadtreeCollisionsFound = 0;
   #endif
 
+#ifdef DEBUG_DISCREPANCY
+  // Debug files for discrepancy investigation
+  static FILE* bfPairsFile = NULL;
+  static FILE* bfCollisionsFile = NULL;
+  static FILE* qtPairsFile = NULL;
+  static FILE* qtCollisionsFile = NULL;
+  static int debugFrameCount = 0;
+  static bool filesOpened = false;
+  
+  debugFrameCount++;
+  if (!filesOpened) {
+    // Open files based on which algorithm is being used
+    // This ensures each algorithm writes to its own file
+    if (!collisionWorld->useQuadtree) {
+      bfPairsFile = fopen("debug_bf_pairs.txt", "w");
+      bfCollisionsFile = fopen("debug_bf_collisions.txt", "w");
+      if (bfPairsFile != NULL) fprintf(bfPairsFile, "=== Brute-Force Pairs Tested ===\n");
+      if (bfCollisionsFile != NULL) fprintf(bfCollisionsFile, "=== Brute-Force Collisions Found ===\n");
+    } else {
+      qtPairsFile = fopen("debug_qt_pairs.txt", "w");
+      qtCollisionsFile = fopen("debug_qt_collisions.txt", "w");
+      if (qtPairsFile != NULL) fprintf(qtPairsFile, "=== Quadtree Pairs Tested ===\n");
+      if (qtCollisionsFile != NULL) fprintf(qtCollisionsFile, "=== Quadtree Collisions Found ===\n");
+    }
+    filesOpened = true;
+  }
+#endif
+
   // Debug: Initialize frame tracking for brute-force (DEBUG_BOX_IN)
   #ifdef DEBUG_BOX_IN
   static FILE* bfEventFileDebug = NULL;
@@ -214,12 +246,48 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
 	#ifdef DEBUG_COLLISIONS
 	bruteForcePairsTested++;
 	#endif
+	#ifdef DEBUG_DISCREPANCY
+	// Log all pairs tested by brute-force
+	if (bfPairsFile != NULL) {
+	  unsigned int id1 = l1->id;
+	  unsigned int id2 = l2->id;
+	  if (id1 > id2) {
+	    unsigned int temp = id1;
+	    id1 = id2;
+	    id2 = temp;
+	  }
+	  // Log detailed physical state for pair (101,105) in ALL frames
+	  if (id1 == 101 && id2 == 105) {
+	    fprintf(bfPairsFile, "FRAME_%d: l1_p1=(%.10f,%.10f) l1_p2=(%.10f,%.10f) l1_vel=(%.10f,%.10f) l2_p1=(%.10f,%.10f) l2_p2=(%.10f,%.10f) l2_vel=(%.10f,%.10f) result=%d\n",
+	            debugFrameCount,
+	            l1->p1.x, l1->p1.y, l1->p2.x, l1->p2.y, l1->velocity.x, l1->velocity.y,
+	            l2->p1.x, l2->p1.y, l2->p2.x, l2->p2.y, l2->velocity.x, l2->velocity.y,
+	            intersectionType);
+	  }
+	  fprintf(bfPairsFile, "Frame %d: (%u,%u) result=%d l1_ptr=%p l2_ptr=%p timeStep=%.10f\n", 
+	          debugFrameCount, id1, id2, intersectionType, (void*)l1, (void*)l2, collisionWorld->timeStep);
+	}
+	#endif
 	if (intersectionType != NO_INTERSECTION) {
 	  IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
 					   intersectionType);
 	  collisionWorld->numLineLineCollisions++;
 	  #ifdef DEBUG_COLLISIONS
 	  bruteForceCollisionsFound++;
+	  #endif
+	  #ifdef DEBUG_DISCREPANCY
+	  // Log all collisions found by brute-force
+	  if (bfCollisionsFile != NULL) {
+	    unsigned int id1 = l1->id;
+	    unsigned int id2 = l2->id;
+	    if (id1 > id2) {
+	      unsigned int temp = id1;
+	      id1 = id2;
+	      id2 = temp;
+	    }
+	    fprintf(bfCollisionsFile, "Frame %d: (%u,%u) type=%d\n", 
+	            debugFrameCount, id1, id2, intersectionType);
+	  }
 	  #endif
 	  
 	  // Debug: Track brute-force events (DEBUG_BOX_IN)
@@ -396,12 +464,48 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
             // Use existing collision detection function
             IntersectionType intersectionType =
                 intersect(l1, l2, collisionWorld->timeStep);
+            #ifdef DEBUG_DISCREPANCY
+            // Log all pairs tested by quadtree
+            if (qtPairsFile != NULL) {
+              unsigned int id1 = l1->id;
+              unsigned int id2 = l2->id;
+              if (id1 > id2) {
+                unsigned int temp = id1;
+                id1 = id2;
+                id2 = temp;
+              }
+              // Log detailed physical state for pair (101,105) in ALL frames
+              if (id1 == 101 && id2 == 105) {
+                fprintf(qtPairsFile, "FRAME_%d: l1_p1=(%.10f,%.10f) l1_p2=(%.10f,%.10f) l1_vel=(%.10f,%.10f) l2_p1=(%.10f,%.10f) l2_p2=(%.10f,%.10f) l2_vel=(%.10f,%.10f) result=%d\n",
+                        debugFrameCount,
+                        l1->p1.x, l1->p1.y, l1->p2.x, l1->p2.y, l1->velocity.x, l1->velocity.y,
+                        l2->p1.x, l2->p1.y, l2->p2.x, l2->p2.y, l2->velocity.x, l2->velocity.y,
+                        intersectionType);
+              }
+              fprintf(qtPairsFile, "Frame %d: (%u,%u) result=%d l1_ptr=%p l2_ptr=%p timeStep=%.10f\n", 
+                      debugFrameCount, id1, id2, intersectionType, (void*)l1, (void*)l2, collisionWorld->timeStep);
+            }
+            #endif
             if (intersectionType != NO_INTERSECTION) {
               IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
                                                intersectionType);
               collisionWorld->numLineLineCollisions++;
               #ifdef DEBUG_COLLISIONS
               quadtreeCollisionsFound++;
+              #endif
+              #ifdef DEBUG_DISCREPANCY
+              // Log all collisions found by quadtree
+              if (qtCollisionsFile != NULL) {
+                unsigned int id1 = l1->id;
+                unsigned int id2 = l2->id;
+                if (id1 > id2) {
+                  unsigned int temp = id1;
+                  id1 = id2;
+                  id2 = temp;
+                }
+                fprintf(qtCollisionsFile, "Frame %d: (%u,%u) type=%d\n", 
+                        debugFrameCount, id1, id2, intersectionType);
+              }
               #endif
             }
           }
@@ -578,6 +682,15 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
   }
 
   IntersectionEventList_deleteNodes(&intersectionEventList);
+  
+#ifdef DEBUG_DISCREPANCY
+  // Close debug files at end of simulation (when frame count is high)
+  // Note: Files will be closed when program exits, but we can flush here
+  if (bfPairsFile != NULL) fflush(bfPairsFile);
+  if (bfCollisionsFile != NULL) fflush(bfCollisionsFile);
+  if (qtPairsFile != NULL) fflush(qtPairsFile);
+  if (qtCollisionsFile != NULL) fflush(qtCollisionsFile);
+#endif
 }
 
 unsigned int CollisionWorld_getNumLineWallCollisions(

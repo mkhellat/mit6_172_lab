@@ -1,0 +1,25 @@
+=== LINE 105 COLLISION COMPARISON (Frames 88-90) ===
+
+FRAME 88:
+  BF found: (105,145), (105,149), (105,161)
+  QT found: (105,145), (105,149)
+  Missing in QT: (105,161)
+  Extra in QT: NONE
+
+FRAME 89:
+  BF found: (41,105), (45,105), (49,105), (53,105), (57,105), 
+            (61,105), (65,105), (69,105), (93,105)
+  QT found: (105,137)
+  Missing in QT: ALL 9 BF collisions
+  Extra in QT: (105,137) - BF did NOT find this!
+
+FRAME 90:
+  BF found: (65,105), (73,105), (97,105), (105,129)
+  QT found: (105,137)
+  Missing in QT: ALL 4 BF collisions
+  Extra in QT: (105,137) - BF did NOT find this!
+
+CONCLUSION:
+- QT is missing 13 collisions that BF found (1 in frame 88, 9 in frame 89, 4 in frame 90)
+- QT found 2 collisions that BF did NOT find: (105,137) in frames 89 and 90
+- This massive difference in collision resolution explains why line 105's state diverged at frame 90
