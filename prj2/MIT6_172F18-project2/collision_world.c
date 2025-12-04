@@ -264,6 +264,14 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
 	            l2->p1.x, l2->p1.y, l2->p2.x, l2->p2.y, l2->velocity.x, l2->velocity.y,
 	            intersectionType);
 	  }
+	  // Log detailed physical state for pair (29,53) in ALL frames
+	  if (id1 == 29 && id2 == 53) {
+	    fprintf(bfPairsFile, "FRAME_%d: l1_p1=(%.10f,%.10f) l1_p2=(%.10f,%.10f) l1_vel=(%.10f,%.10f) l2_p1=(%.10f,%.10f) l2_p2=(%.10f,%.10f) l2_vel=(%.10f,%.10f) result=%d\n",
+	            debugFrameCount,
+	            l1->p1.x, l1->p1.y, l1->p2.x, l1->p2.y, l1->velocity.x, l1->velocity.y,
+	            l2->p1.x, l2->p1.y, l2->p2.x, l2->p2.y, l2->velocity.x, l2->velocity.y,
+	            intersectionType);
+	  }
 	  fprintf(bfPairsFile, "Frame %d: (%u,%u) result=%d l1_ptr=%p l2_ptr=%p timeStep=%.10f\n", 
 	          debugFrameCount, id1, id2, intersectionType, (void*)l1, (void*)l2, collisionWorld->timeStep);
 	}
@@ -476,6 +484,14 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
               }
               // Log detailed physical state for pair (101,105) in ALL frames
               if (id1 == 101 && id2 == 105) {
+                fprintf(qtPairsFile, "FRAME_%d: l1_p1=(%.10f,%.10f) l1_p2=(%.10f,%.10f) l1_vel=(%.10f,%.10f) l2_p1=(%.10f,%.10f) l2_p2=(%.10f,%.10f) l2_vel=(%.10f,%.10f) result=%d\n",
+                        debugFrameCount,
+                        l1->p1.x, l1->p1.y, l1->p2.x, l1->p2.y, l1->velocity.x, l1->velocity.y,
+                        l2->p1.x, l2->p1.y, l2->p2.x, l2->p2.y, l2->velocity.x, l2->velocity.y,
+                        intersectionType);
+              }
+              // Log detailed physical state for pair (29,53) in ALL frames
+              if (id1 == 29 && id2 == 53) {
                 fprintf(qtPairsFile, "FRAME_%d: l1_p1=(%.10f,%.10f) l1_p2=(%.10f,%.10f) l1_vel=(%.10f,%.10f) l2_p1=(%.10f,%.10f) l2_p2=(%.10f,%.10f) l2_vel=(%.10f,%.10f) result=%d\n",
                         debugFrameCount,
                         l1->p1.x, l1->p1.y, l1->p2.x, l1->p2.y, l1->velocity.x, l1->velocity.y,
