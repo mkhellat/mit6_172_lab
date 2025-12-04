@@ -36,6 +36,12 @@
 #include "./line.h"
 #include "./vec.h"
 
+// Debug flag for discrepancy investigation
+// When enabled, logs cell assignments and candidate pairs for specific frames
+#ifndef DEBUG_DISCREPANCY
+#define DEBUG_DISCREPANCY 1
+#endif
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -902,12 +908,13 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     totalCellsChecked += (unsigned int)numCells;
     
     #ifdef DEBUG_DISCREPANCY
-    // Debug: Log cell assignments for specific lines in frame 89
-    // Lines we care about: 41, 45, 49, 53, 57, 61, 65, 69, 93, 105, 137
+    // Debug: Log cell assignments for specific lines in frame 89 and 95
+    // Frame 89 lines: 41, 45, 49, 53, 57, 61, 65, 69, 93, 105, 137
+    // Frame 95 lines: 29, 77, 89 (for pair (29,53) root cause investigation)
     static FILE* qtCellFile = NULL;
     static bool qtCellFileOpened = false;
     if (!qtCellFileOpened) {
-      qtCellFile = fopen("debug_qt_cells.txt", "w");
+      qtCellFile = fopen("debug_qt_cells.txt", "a");
       if (qtCellFile != NULL) {
         fprintf(qtCellFile, "=== Quadtree Cell Assignments ===\n");
       }
@@ -916,22 +923,26 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     
     // Check if this is one of the lines we're tracking
     unsigned int line1Id = line1->id;
-    bool isTrackedLine = (line1Id == 41 || line1Id == 45 || line1Id == 49 ||
-                          line1Id == 53 || line1Id == 57 || line1Id == 61 ||
-                          line1Id == 65 || line1Id == 69 || line1Id == 93 ||
-                          line1Id == 105 || line1Id == 137);
+    bool isTrackedLine89 = (line1Id == 41 || line1Id == 45 || line1Id == 49 ||
+                            line1Id == 53 || line1Id == 57 || line1Id == 61 ||
+                            line1Id == 65 || line1Id == 69 || line1Id == 93 ||
+                            line1Id == 105 || line1Id == 137);
+    bool isTrackedLine95 = (line1Id == 29 || line1Id == 77 || line1Id == 89);
     
-    if (isTrackedLine && frameNumber == 89 && qtCellFile != NULL) {
-      fprintf(qtCellFile, "Frame %d: Line %u (array idx=%u) in %d cells: ",
-              frameNumber, line1Id, i, numCells);
-      for (int c = 0; c < numCells; c++) {
-        QuadNode* cell = overlappingCells[c];
-        fprintf(qtCellFile, "[%.6f,%.6f)x[%.6f,%.6f)@depth%d ",
-                cell->xmin, cell->xmax, cell->ymin, cell->ymax, cell->depth);
+    if ((isTrackedLine89 && frameNumber == 89) || 
+        (isTrackedLine95 && frameNumber == 95)) {
+      if (qtCellFile != NULL) {
+        fprintf(qtCellFile, "Frame %d: Line %u (array idx=%u) in %d cells: ",
+                frameNumber, line1Id, i, numCells);
+        for (int c = 0; c < numCells; c++) {
+          QuadNode* cell = overlappingCells[c];
+          fprintf(qtCellFile, "[%.6f,%.6f)x[%.6f,%.6f)@depth%d ",
+                  cell->xmin, cell->xmax, cell->ymin, cell->ymax, cell->depth);
+        }
+        fprintf(qtCellFile, "bbox=[%.6f,%.6f]x[%.6f,%.6f]\n",
+                lineXmin, lineXmax, lineYmin, lineYmax);
+        fflush(qtCellFile);
       }
-      fprintf(qtCellFile, "bbox=[%.6f,%.6f]x[%.6f,%.6f]\n",
-              lineXmin, lineXmax, lineYmin, lineYmax);
-      fflush(qtCellFile);
     }
     #endif
     
@@ -965,7 +976,7 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         static FILE* qtCandidatesFile = NULL;
         static bool qtCandidatesFileOpened = false;
         if (!qtCandidatesFileOpened) {
-          qtCandidatesFile = fopen("debug_qt_candidates.txt", "w");
+          qtCandidatesFile = fopen("debug_qt_candidates.txt", "a");
           if (qtCandidatesFile != NULL) {
             fprintf(qtCandidatesFile, "=== Quadtree Candidate Pairs (Before Filtering) ===\n");
           }
