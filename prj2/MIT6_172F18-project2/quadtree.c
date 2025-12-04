@@ -96,9 +96,15 @@ static double maxDouble(double a, double b) {
  * @param ymin Output parameter for minimum Y
  * @param ymax Output parameter for maximum Y
  */
+// TEST IMPLEMENTATION: Multi-factor AABB expansion
+// This is a test implementation to evaluate if velocity-dependent expansion
+// improves collision detection accuracy. Parameters k_rel and k_gap are
+// tunable and may need refinement or replacement with a better solution.
 static void computeLineBoundingBox(const Line* line, double timeStep,
                                    double* xmin, double* xmax,
-                                   double* ymin, double* ymax) {
+                                   double* ymin, double* ymax,
+                                   double maxVelocityInSystem,
+                                   double minCellSize) {
   // Current endpoints
   Vec p1_current = line->p1;
   Vec p2_current = line->p2;
@@ -117,22 +123,41 @@ static void computeLineBoundingBox(const Line* line, double timeStep,
   *ymax = maxDouble(maxDouble(p1_current.y, p2_current.y),
                     maxDouble(p1_future.y, p2_future.y));
   
-  // CRITICAL FIX: Expand bounding box slightly to account for:
-  // 1. Numerical precision errors (lines very close to cell boundaries)
-  // 2. Swept parallelogram area (moving line segments sweep out area)
-  // 3. Edge cases near cell boundaries (e.g., Line 105 was 0.000414 from boundary)
+  // TEST IMPLEMENTATION: Multi-factor expansion to address:
+  // 1. Relative motion mismatch (absolute vs relative parallelograms)
+  // 2. AABB gap problem (AABBs overlap in world space but not same cells)
   // 
-  // Without this expansion, lines that should be in overlapping cells
-  // end up in non-overlapping cells, causing quadtree to miss candidate pairs.
-  // 
-  // Epsilon value: 0.0005 (half of 0.001) is approximately 0.06% of typical
-  // cell size (~0.008 at depth 6). This is small enough to avoid significant
-  // false positives but large enough to handle numerical precision issues.
-  const double epsilon = 0.0005;
-  *xmin -= epsilon;
-  *xmax += epsilon;
-  *ymin -= epsilon;
-  *ymax += epsilon;
+  // NOTE: This uses hard-coded parameters (k_rel, k_gap) which is not ideal.
+  // This is a test to see if the approach works. A better solution would
+  // compute these dynamically or use a different approach entirely.
+  
+  // Factor 1: Relative motion expansion
+  // Accounts for maximum relative velocity between lines
+  // If line has velocity v, relative velocity with another line can be up to ~2*v_max
+  // We expand by a fraction of the line's velocity magnitude
+  double velocity_magnitude = Vec_length(line->velocity);
+  const double k_rel = 0.3;  // TEST PARAMETER: Relative motion factor (tunable: 0.2-0.5)
+  double relative_motion_expansion = velocity_magnitude * timeStep * k_rel;
+  
+  // Factor 2: Minimum gap expansion
+  // Ensures AABBs that are close (within fraction of cell size) overlap same cells
+  // Addresses the AABB gap problem (Scenario 3B, 7C from query scenarios analysis)
+  const double k_gap = 0.15;  // TEST PARAMETER: Gap factor (tunable: 0.1-0.2)
+  double min_gap_expansion = minCellSize * k_gap;
+  
+  // Factor 3: Numerical precision margin
+  // Small fixed value to handle floating-point precision issues
+  const double precision_margin = 1e-6;
+  
+  // Use maximum of relative motion and gap expansion, plus precision margin
+  // This ensures we address both issues (relative motion and gap problem)
+  double expansion = maxDouble(relative_motion_expansion, min_gap_expansion) 
+                     + precision_margin;
+  
+  *xmin -= expansion;
+  *xmax += expansion;
+  *ymin -= expansion;
+  *ymax += expansion;
 }
 
 /**
@@ -555,8 +580,23 @@ static QuadTreeError insertLineRecursive(QuadNode* node,
         Line* existingLine = node->lines[i];
         double exmin, exmax, eymin, eymax;
         // Use the timeStep from build phase (stored in tree structure)
+        // TEST IMPLEMENTATION: Need to compute maxVelocity for expansion
+        // For now, we'll compute it on-the-fly (inefficient but works for testing)
+        // TODO: Store maxVelocity in tree structure for efficiency
+        double maxVelocity = 0.0;
+        for (unsigned int k = 0; k < tree->numLines; k++) {
+          if (tree->lines[k] != NULL) {
+            double v_mag = Vec_length(tree->lines[k]->velocity);
+            if (v_mag > maxVelocity) {
+              maxVelocity = v_mag;
+            }
+          }
+        }
+        if (maxVelocity == 0.0) {
+          maxVelocity = 1e-10;
+        }
         computeLineBoundingBox(existingLine, tree->buildTimeStep, &exmin, &exmax,
-                               &eymin, &eymax);
+                               &eymin, &eymax, maxVelocity, tree->config.minCellSize);
         
         for (int j = 0; j < 4; j++) {
           insertLineRecursive(node->children[j], existingLine,
@@ -606,6 +646,23 @@ QuadTreeError QuadTree_build(QuadTree* tree,
   tree->numLines = numLines;
   tree->buildTimeStep = timeStep;  // Store for use during subdivision
   
+  // TEST IMPLEMENTATION: Compute maximum velocity in system for AABB expansion
+  // This is needed for the velocity-dependent expansion in computeLineBoundingBox
+  double maxVelocity = 0.0;
+  for (unsigned int i = 0; i < numLines; i++) {
+    if (lines[i] == NULL) {
+      continue;
+    }
+    double v_mag = Vec_length(lines[i]->velocity);
+    if (v_mag > maxVelocity) {
+      maxVelocity = v_mag;
+    }
+  }
+  // If no lines or all velocities are zero, use a small default to avoid division issues
+  if (maxVelocity == 0.0) {
+    maxVelocity = 1e-10;
+  }
+  
   // Reset statistics if enabled
   if (tree->stats != NULL) {
     memset(tree->stats, 0, sizeof(QuadTreeDebugStats));
@@ -623,7 +680,8 @@ QuadTreeError QuadTree_build(QuadTree* tree,
     // Compute line's bounding box
     double lineXmin, lineXmax, lineYmin, lineYmax;
     computeLineBoundingBox(lines[i], timeStep,
-                           &lineXmin, &lineXmax, &lineYmin, &lineYmax);
+                           &lineXmin, &lineXmax, &lineYmin, &lineYmax,
+                           maxVelocity, tree->config.minCellSize);
     
     // Insert into tree
     QuadTreeError result = insertLineRecursive(tree->root, lines[i],
@@ -806,9 +864,24 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     // Compute line's bounding box
     // CRITICAL: Use buildTimeStep to match the timeStep used during build phase
     // This ensures bounding boxes are computed consistently between build and query
+    // TEST IMPLEMENTATION: Need maxVelocity and minCellSize for expansion
+    // TODO: Store maxVelocity in tree structure to avoid recomputing
+    double maxVelocity = 0.0;
+    for (unsigned int k = 0; k < tree->numLines; k++) {
+      if (tree->lines[k] != NULL) {
+        double v_mag = Vec_length(tree->lines[k]->velocity);
+        if (v_mag > maxVelocity) {
+          maxVelocity = v_mag;
+        }
+      }
+    }
+    if (maxVelocity == 0.0) {
+      maxVelocity = 1e-10;
+    }
     double lineXmin, lineXmax, lineYmin, lineYmax;
     computeLineBoundingBox(line1, tree->buildTimeStep,
-                           &lineXmin, &lineXmax, &lineYmin, &lineYmax);
+                           &lineXmin, &lineXmax, &lineYmin, &lineYmax,
+                           maxVelocity, tree->config.minCellSize);
     
     // Find all cells this line overlaps
     int numCells = findOverlappingCellsRecursive(tree->root,
