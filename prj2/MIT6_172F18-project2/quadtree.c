@@ -669,6 +669,79 @@ QuadTreeError QuadTree_build(QuadTree* tree,
     maxVelocity = 1e-10;
   }
   
+  // CRITICAL FIX: Expand root bounds to include all lines
+  // Compute actual bounds of all lines (including future positions)
+  // This ensures lines outside the initial box bounds are included
+  double actualXmin = tree->worldXmax;
+  double actualXmax = tree->worldXmin;
+  double actualYmin = tree->worldYmax;
+  double actualYmax = tree->worldYmin;
+  
+  // Compute bounding boxes for all lines and find actual bounds
+  for (unsigned int i = 0; i < numLines; i++) {
+    if (lines[i] == NULL) {
+      continue;
+    }
+    
+    double lineXmin, lineXmax, lineYmin, lineYmax;
+    computeLineBoundingBox(lines[i], timeStep,
+                           &lineXmin, &lineXmax, &lineYmin, &lineYmax,
+                           maxVelocity, tree->config.minCellSize);
+    
+    // Expand bounds to include this line's bbox
+    if (lineXmin < actualXmin) {
+      actualXmin = lineXmin;
+    }
+    if (lineXmax > actualXmax) {
+      actualXmax = lineXmax;
+    }
+    if (lineYmin < actualYmin) {
+      actualYmin = lineYmin;
+    }
+    if (lineYmax > actualYmax) {
+      actualYmax = lineYmax;
+    }
+  }
+  
+  // Expand root bounds to include all lines (with small margin)
+  const double margin = 1e-6;
+  if (actualXmin < tree->worldXmin) {
+    tree->worldXmin = actualXmin - margin;
+  }
+  if (actualXmax > tree->worldXmax) {
+    tree->worldXmax = actualXmax + margin;
+  }
+  if (actualYmin < tree->worldYmin) {
+    tree->worldYmin = actualYmin - margin;
+  }
+  if (actualYmax > tree->worldYmax) {
+    tree->worldYmax = actualYmax + margin;
+  }
+  
+  // Ensure bounds form a square (take larger dimension)
+  double width = tree->worldXmax - tree->worldXmin;
+  double height = tree->worldYmax - tree->worldYmin;
+  double size = maxDouble(width, height);
+  
+  // Center the square
+  double centerX = (tree->worldXmin + tree->worldXmax) / 2.0;
+  double centerY = (tree->worldYmin + tree->worldYmax) / 2.0;
+  
+  tree->worldXmin = centerX - size / 2.0;
+  tree->worldXmax = centerX + size / 2.0;
+  tree->worldYmin = centerY - size / 2.0;
+  tree->worldYmax = centerY + size / 2.0;
+  
+  // Recreate root node with expanded bounds
+  if (tree->root != NULL) {
+    destroyQuadNode(tree->root);
+  }
+  tree->root = createQuadNode(tree->worldXmin, tree->worldXmax,
+                               tree->worldYmin, tree->worldYmax, 0);
+  if (tree->root == NULL) {
+    return QUADTREE_ERROR_MALLOC_FAILED;
+  }
+  
   // Reset statistics if enabled
   if (tree->stats != NULL) {
     memset(tree->stats, 0, sizeof(QuadTreeDebugStats));
