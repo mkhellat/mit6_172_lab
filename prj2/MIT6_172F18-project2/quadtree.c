@@ -736,6 +736,21 @@ static int findOverlappingCellsRecursive(QuadNode* node,
                                          QuadNode** cells,
                                          int cellCount,
                                          int cellCapacity) {
+  // DEBUG: Log for line 393 in frame 85
+  #ifdef DEBUG_DISCREPANCY
+  static bool debugLine393 = false;
+  if (!debugLine393 && lineXmin >= 0.497 && lineXmin <= 0.500 && 
+      lineYmin >= 0.656 && lineYmin <= 0.720) {
+    // This might be line 393 - check if it's the root node
+    if (node->depth == 0) {
+      fprintf(stderr, "DEBUG: findOverlappingCellsRecursive called for bbox [%.9f,%.9f]x[%.9f,%.9f], root=[%.9f,%.9f]x[%.9f,%.9f]\n",
+              lineXmin, lineXmax, lineYmin, lineYmax,
+              node->xmin, node->xmax, node->ymin, node->ymax);
+      debugLine393 = true;
+    }
+  }
+  #endif
+  
   // Check if line overlaps this cell
   if (!boxesOverlap(lineXmin, lineXmax, lineYmin, lineYmax,
                     node->xmin, node->xmax, node->ymin, node->ymax)) {
