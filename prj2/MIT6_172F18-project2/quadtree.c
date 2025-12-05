@@ -908,7 +908,8 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     totalCellsChecked += (unsigned int)numCells;
     
     #ifdef DEBUG_DISCREPANCY
-    // Debug: Log cell assignments for specific lines in frame 89 and 95
+    // Debug: Log cell assignments for specific lines in frames 85, 89, and 95
+    // Frame 85 lines: 77, 377, 393 (for first ring investigation)
     // Frame 89 lines: 41, 45, 49, 53, 57, 61, 65, 69, 93, 105, 137
     // Frame 95 lines: 29, 77, 89 (for pair (29,53) root cause investigation)
     static FILE* qtCellFile = NULL;
@@ -923,13 +924,15 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     
     // Check if this is one of the lines we're tracking
     unsigned int line1Id = line1->id;
+    bool isTrackedLine85 = (line1Id == 77 || line1Id == 377 || line1Id == 393);
     bool isTrackedLine89 = (line1Id == 41 || line1Id == 45 || line1Id == 49 ||
                             line1Id == 53 || line1Id == 57 || line1Id == 61 ||
                             line1Id == 65 || line1Id == 69 || line1Id == 93 ||
                             line1Id == 105 || line1Id == 137);
     bool isTrackedLine95 = (line1Id == 29 || line1Id == 77 || line1Id == 89);
     
-    if ((isTrackedLine89 && frameNumber == 89) || 
+    if ((isTrackedLine85 && frameNumber == 85) ||
+        (isTrackedLine89 && frameNumber == 89) || 
         (isTrackedLine95 && frameNumber == 95)) {
       if (qtCellFile != NULL) {
         fprintf(qtCellFile, "Frame %d: Line %u (array idx=%u) in %d cells: ",
@@ -972,7 +975,7 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         }
         
         #ifdef DEBUG_DISCREPANCY
-        // Debug: Log candidate pairs found (before filtering) for specific lines in frame 89
+        // Debug: Log candidate pairs found (before filtering) for specific lines in frames 85, 89, and 95
         static FILE* qtCandidatesFile = NULL;
         static bool qtCandidatesFileOpened = false;
         if (!qtCandidatesFileOpened) {
@@ -986,12 +989,20 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         unsigned int line1Id = line1->id;
         unsigned int line2Id = line2->id;
         
-        // Check if this is one of the pairs we're tracking in frame 89
-        // Missing pairs: (41,105), (45,105), (49,105), (53,105), (57,105),
-        //                (61,105), (65,105), (69,105), (93,105)
-        // False positive: (105,137)
+        // Check if this is one of the pairs we're tracking
+        // Frame 85: (377,393) - missing collision (first ring)
+        // Frame 89: Missing pairs: (41,105), (45,105), (49,105), (53,105), (57,105),
+        //                          (61,105), (65,105), (69,105), (93,105)
+        //           False positive: (105,137)
+        // Frame 95: (29,89) - missing, (29,77) - false positive
         bool isTrackedPair = false;
-        if (frameNumber == 89) {
+        if (frameNumber == 85) {
+          if ((line1Id == 77 && line2Id == 393) || (line1Id == 393 && line2Id == 77) ||
+              (line1Id == 377 && line2Id == 393) || (line1Id == 393 && line2Id == 377) ||
+              (line1Id == 77 && line2Id == 377) || (line1Id == 377 && line2Id == 77)) {
+            isTrackedPair = true;
+          }
+        } else if (frameNumber == 89) {
           if ((line1Id == 41 && line2Id == 105) || (line1Id == 105 && line2Id == 41) ||
               (line1Id == 45 && line2Id == 105) || (line1Id == 105 && line2Id == 45) ||
               (line1Id == 49 && line2Id == 105) || (line1Id == 105 && line2Id == 49) ||
@@ -1002,6 +1013,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
               (line1Id == 69 && line2Id == 105) || (line1Id == 105 && line2Id == 69) ||
               (line1Id == 93 && line2Id == 105) || (line1Id == 105 && line2Id == 93) ||
               (line1Id == 105 && line2Id == 137) || (line1Id == 137 && line2Id == 105)) {
+            isTrackedPair = true;
+          }
+        } else if (frameNumber == 95) {
+          if ((line1Id == 29 && line2Id == 89) || (line1Id == 89 && line2Id == 29) ||
+              (line1Id == 29 && line2Id == 77) || (line1Id == 77 && line2Id == 29)) {
             isTrackedPair = true;
           }
         }
@@ -1039,7 +1055,7 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           static FILE* qtFilteredFile = NULL;
           static bool qtFilteredFileOpened = false;
           if (!qtFilteredFileOpened) {
-            qtFilteredFile = fopen("debug_qt_filtered.txt", "w");
+            qtFilteredFile = fopen("debug_qt_filtered.txt", "a");
             if (qtFilteredFile != NULL) {
               fprintf(qtFilteredFile, "=== Quadtree Filtered Pairs ===\n");
             }
@@ -1049,9 +1065,15 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           unsigned int line1Id = line1->id;
           unsigned int line2Id = line2->id;
           
-          // Log filtering for tracked pairs in frame 89
+          // Log filtering for tracked pairs in frames 85, 89, and 95
           bool isTrackedPair = false;
-          if (frameNumber == 89) {
+          if (frameNumber == 85) {
+            if ((line1Id == 77 && line2Id == 393) || (line1Id == 393 && line2Id == 77) ||
+                (line1Id == 377 && line2Id == 393) || (line1Id == 393 && line2Id == 377) ||
+                (line1Id == 77 && line2Id == 377) || (line1Id == 377 && line2Id == 77)) {
+              isTrackedPair = true;
+            }
+          } else if (frameNumber == 89) {
             if ((line1Id == 41 && line2Id == 105) || (line1Id == 105 && line2Id == 41) ||
                 (line1Id == 45 && line2Id == 105) || (line1Id == 105 && line2Id == 45) ||
                 (line1Id == 49 && line2Id == 105) || (line1Id == 105 && line2Id == 49) ||
@@ -1062,6 +1084,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
                 (line1Id == 69 && line2Id == 105) || (line1Id == 105 && line2Id == 69) ||
                 (line1Id == 93 && line2Id == 105) || (line1Id == 105 && line2Id == 93) ||
                 (line1Id == 105 && line2Id == 137) || (line1Id == 137 && line2Id == 105)) {
+              isTrackedPair = true;
+            }
+          } else if (frameNumber == 95) {
+            if ((line1Id == 29 && line2Id == 89) || (line1Id == 89 && line2Id == 29) ||
+                (line1Id == 29 && line2Id == 77) || (line1Id == 77 && line2Id == 29)) {
               isTrackedPair = true;
             }
           }
@@ -1088,9 +1115,15 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           unsigned int line1Id = line1->id;
           unsigned int line2Id = line2->id;
           
-          // Log filtering for tracked pairs in frame 89
+          // Log filtering for tracked pairs in frames 85, 89, and 95
           bool isTrackedPair = false;
-          if (frameNumber == 89) {
+          if (frameNumber == 85) {
+            if ((line1Id == 77 && line2Id == 393) || (line1Id == 393 && line2Id == 77) ||
+                (line1Id == 377 && line2Id == 393) || (line1Id == 393 && line2Id == 377) ||
+                (line1Id == 77 && line2Id == 377) || (line1Id == 377 && line2Id == 77)) {
+              isTrackedPair = true;
+            }
+          } else if (frameNumber == 89) {
             if ((line1Id == 41 && line2Id == 105) || (line1Id == 105 && line2Id == 41) ||
                 (line1Id == 45 && line2Id == 105) || (line1Id == 105 && line2Id == 45) ||
                 (line1Id == 49 && line2Id == 105) || (line1Id == 105 && line2Id == 49) ||
@@ -1101,6 +1134,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
                 (line1Id == 69 && line2Id == 105) || (line1Id == 105 && line2Id == 69) ||
                 (line1Id == 93 && line2Id == 105) || (line1Id == 105 && line2Id == 93) ||
                 (line1Id == 105 && line2Id == 137) || (line1Id == 137 && line2Id == 105)) {
+              isTrackedPair = true;
+            }
+          } else if (frameNumber == 95) {
+            if ((line1Id == 29 && line2Id == 89) || (line1Id == 89 && line2Id == 29) ||
+                (line1Id == 29 && line2Id == 77) || (line1Id == 77 && line2Id == 29)) {
               isTrackedPair = true;
             }
           }
