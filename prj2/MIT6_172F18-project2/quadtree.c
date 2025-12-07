@@ -38,9 +38,6 @@
 
 // Debug flag for discrepancy investigation
 // When enabled, logs cell assignments and candidate pairs for specific frames
-#ifndef DEBUG_DISCREPANCY
-#define DEBUG_DISCREPANCY 1
-#endif
 
 // ============================================================================
 // Constants
@@ -809,20 +806,6 @@ static int findOverlappingCellsRecursive(QuadNode* node,
                                          QuadNode** cells,
                                          int cellCount,
                                          int cellCapacity) {
-  // DEBUG: Log for line 393 in frame 85
-  #ifdef DEBUG_DISCREPANCY
-  static bool debugLine393 = false;
-  if (!debugLine393 && lineXmin >= 0.497 && lineXmin <= 0.500 && 
-      lineYmin >= 0.656 && lineYmin <= 0.720) {
-    // This might be line 393 - check if it's the root node
-    if (node->depth == 0) {
-      fprintf(stderr, "DEBUG: findOverlappingCellsRecursive called for bbox [%.9f,%.9f]x[%.9f,%.9f], root=[%.9f,%.9f]x[%.9f,%.9f]\n",
-              lineXmin, lineXmax, lineYmin, lineYmax,
-              node->xmin, node->xmax, node->ymin, node->ymax);
-      debugLine393 = true;
-    }
-  }
-  #endif
   
   // Check if line overlaps this cell
   if (!boxesOverlap(lineXmin, lineXmax, lineYmin, lineYmax,
@@ -995,47 +978,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     
     totalCellsChecked += (unsigned int)numCells;
     
-    #ifdef DEBUG_DISCREPANCY
-    // Debug: Log cell assignments for specific lines in frames 85, 89, and 95
-    // Frame 85 lines: 77, 377, 393 (for first ring investigation)
-    // Frame 89 lines: 41, 45, 49, 53, 57, 61, 65, 69, 93, 105, 137
-    // Frame 95 lines: 29, 77, 89 (for pair (29,53) root cause investigation)
-    static FILE* qtCellFile = NULL;
-    static bool qtCellFileOpened = false;
-    if (!qtCellFileOpened) {
-      qtCellFile = fopen("debug_qt_cells.txt", "a");
-      if (qtCellFile != NULL) {
-        fprintf(qtCellFile, "=== Quadtree Cell Assignments ===\n");
-      }
-      qtCellFileOpened = true;
-    }
-    
-    // Check if this is one of the lines we're tracking
-    unsigned int line1Id = line1->id;
-    bool isTrackedLine85 = (line1Id == 77 || line1Id == 377 || line1Id == 393);
-    bool isTrackedLine89 = (line1Id == 41 || line1Id == 45 || line1Id == 49 ||
-                            line1Id == 53 || line1Id == 57 || line1Id == 61 ||
-                            line1Id == 65 || line1Id == 69 || line1Id == 93 ||
-                            line1Id == 105 || line1Id == 137);
-    bool isTrackedLine95 = (line1Id == 29 || line1Id == 77 || line1Id == 89);
-    
-    if ((isTrackedLine85 && frameNumber == 85) ||
-        (isTrackedLine89 && frameNumber == 89) || 
-        (isTrackedLine95 && frameNumber == 95)) {
-      if (qtCellFile != NULL) {
-        fprintf(qtCellFile, "Frame %d: Line %u (array idx=%u) in %d cells: ",
-                frameNumber, line1Id, i, numCells);
-        for (int c = 0; c < numCells; c++) {
-          QuadNode* cell = overlappingCells[c];
-          fprintf(qtCellFile, "[%.6f,%.6f)x[%.6f,%.6f)@depth%d ",
-                  cell->xmin, cell->xmax, cell->ymin, cell->ymax, cell->depth);
-        }
-        fprintf(qtCellFile, "bbox=[%.6f,%.6f]x[%.6f,%.6f]\n",
-                lineXmin, lineXmax, lineYmin, lineYmax);
-        fflush(qtCellFile);
-      }
-    }
-    #endif
     
     // Collect all OTHER lines from these cells
     // CRITICAL FIX: Only consider pairs that brute-force would also test.
@@ -1062,60 +1004,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           continue;
         }
         
-        #ifdef DEBUG_DISCREPANCY
-        // Debug: Log candidate pairs found (before filtering) for specific lines in frames 85, 89, and 95
-        static FILE* qtCandidatesFile = NULL;
-        static bool qtCandidatesFileOpened = false;
-        if (!qtCandidatesFileOpened) {
-          qtCandidatesFile = fopen("debug_qt_candidates.txt", "a");
-          if (qtCandidatesFile != NULL) {
-            fprintf(qtCandidatesFile, "=== Quadtree Candidate Pairs (Before Filtering) ===\n");
-          }
-          qtCandidatesFileOpened = true;
-        }
-        
-        unsigned int line1Id = line1->id;
-        unsigned int line2Id = line2->id;
-        
-        // Check if this is one of the pairs we're tracking
-        // Frame 85: (377,393) - missing collision (first ring)
-        // Frame 89: Missing pairs: (41,105), (45,105), (49,105), (53,105), (57,105),
-        //                          (61,105), (65,105), (69,105), (93,105)
-        //           False positive: (105,137)
-        // Frame 95: (29,89) - missing, (29,77) - false positive
-        bool isTrackedPair = false;
-        if (frameNumber == 85) {
-          if ((line1Id == 77 && line2Id == 393) || (line1Id == 393 && line2Id == 77) ||
-              (line1Id == 377 && line2Id == 393) || (line1Id == 393 && line2Id == 377) ||
-              (line1Id == 77 && line2Id == 377) || (line1Id == 377 && line2Id == 77)) {
-            isTrackedPair = true;
-          }
-        } else if (frameNumber == 89) {
-          if ((line1Id == 41 && line2Id == 105) || (line1Id == 105 && line2Id == 41) ||
-              (line1Id == 45 && line2Id == 105) || (line1Id == 105 && line2Id == 45) ||
-              (line1Id == 49 && line2Id == 105) || (line1Id == 105 && line2Id == 49) ||
-              (line1Id == 53 && line2Id == 105) || (line1Id == 105 && line2Id == 53) ||
-              (line1Id == 57 && line2Id == 105) || (line1Id == 105 && line2Id == 57) ||
-              (line1Id == 61 && line2Id == 105) || (line1Id == 105 && line2Id == 61) ||
-              (line1Id == 65 && line2Id == 105) || (line1Id == 105 && line2Id == 65) ||
-              (line1Id == 69 && line2Id == 105) || (line1Id == 105 && line2Id == 69) ||
-              (line1Id == 93 && line2Id == 105) || (line1Id == 105 && line2Id == 93) ||
-              (line1Id == 105 && line2Id == 137) || (line1Id == 137 && line2Id == 105)) {
-            isTrackedPair = true;
-          }
-        } else if (frameNumber == 95) {
-          if ((line1Id == 29 && line2Id == 89) || (line1Id == 89 && line2Id == 29) ||
-              (line1Id == 29 && line2Id == 77) || (line1Id == 77 && line2Id == 29)) {
-            isTrackedPair = true;
-          }
-        }
-        
-        if (isTrackedPair && qtCandidatesFile != NULL) {
-          fprintf(qtCandidatesFile, "Frame %d: Found candidate pair (line1 id=%u at idx=%u, line2 id=%u) in cell [%.6f,%.6f)x[%.6f,%.6f)@depth%d\n",
-                  frameNumber, line1Id, i, line2Id, cell->xmin, cell->xmax, cell->ymin, cell->ymax, cell->depth);
-          fflush(qtCandidatesFile);
-        }
-        #endif
         
         // CRITICAL: Ensure line2 appears later in tree->lines than line1
         // This matches brute-force's iteration order (i < j)
@@ -1130,113 +1018,17 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         }
         if (!line2Found) {
           // line2 is not in tree->lines - this shouldn't happen, but skip it
-          #ifdef DEBUG_DISCREPANCY
-          fprintf(stderr, "WARNING: line2 (id=%u) not found in tree->lines!\n", line2->id);
-          #endif
           continue;
         }
         if (line2ArrayIndex <= i) {
           // line2 appears before/at line1's position in the array
           // Brute-force would test this as (line2, line1) when j < i, not (line1, line2)
           // So we should skip it here to avoid double-testing
-          #ifdef DEBUG_DISCREPANCY
-          static FILE* qtFilteredFile = NULL;
-          static bool qtFilteredFileOpened = false;
-          if (!qtFilteredFileOpened) {
-            qtFilteredFile = fopen("debug_qt_filtered.txt", "a");
-            if (qtFilteredFile != NULL) {
-              fprintf(qtFilteredFile, "=== Quadtree Filtered Pairs ===\n");
-            }
-            qtFilteredFileOpened = true;
-          }
-          
-          unsigned int line1Id = line1->id;
-          unsigned int line2Id = line2->id;
-          
-          // Log filtering for tracked pairs in frames 85, 89, and 95
-          bool isTrackedPair = false;
-          if (frameNumber == 85) {
-            if ((line1Id == 77 && line2Id == 393) || (line1Id == 393 && line2Id == 77) ||
-                (line1Id == 377 && line2Id == 393) || (line1Id == 393 && line2Id == 377) ||
-                (line1Id == 77 && line2Id == 377) || (line1Id == 377 && line2Id == 77)) {
-              isTrackedPair = true;
-            }
-          } else if (frameNumber == 89) {
-            if ((line1Id == 41 && line2Id == 105) || (line1Id == 105 && line2Id == 41) ||
-                (line1Id == 45 && line2Id == 105) || (line1Id == 105 && line2Id == 45) ||
-                (line1Id == 49 && line2Id == 105) || (line1Id == 105 && line2Id == 49) ||
-                (line1Id == 53 && line2Id == 105) || (line1Id == 105 && line2Id == 53) ||
-                (line1Id == 57 && line2Id == 105) || (line1Id == 105 && line2Id == 57) ||
-                (line1Id == 61 && line2Id == 105) || (line1Id == 105 && line2Id == 61) ||
-                (line1Id == 65 && line2Id == 105) || (line1Id == 105 && line2Id == 65) ||
-                (line1Id == 69 && line2Id == 105) || (line1Id == 105 && line2Id == 69) ||
-                (line1Id == 93 && line2Id == 105) || (line1Id == 105 && line2Id == 93) ||
-                (line1Id == 105 && line2Id == 137) || (line1Id == 137 && line2Id == 105)) {
-              isTrackedPair = true;
-            }
-          } else if (frameNumber == 95) {
-            if ((line1Id == 29 && line2Id == 89) || (line1Id == 89 && line2Id == 29) ||
-                (line1Id == 29 && line2Id == 77) || (line1Id == 77 && line2Id == 29)) {
-              isTrackedPair = true;
-            }
-          }
-          
-          if (isTrackedPair && qtFilteredFile != NULL) {
-            fprintf(qtFilteredFile, "Frame %d: Filtered pair (line1 id=%u at idx=%u, line2 id=%u at idx=%u) - REASON: line2 array idx <= line1 array idx\n",
-                    frameNumber, line1Id, i, line2Id, line2ArrayIndex);
-            fflush(qtFilteredFile);
-          }
-          #endif
           continue;
         }
         
         // Now ensure line1->id < line2->id (matches brute-force after swap)
         if (line1->id >= line2->id) {
-          #ifdef DEBUG_DISCREPANCY
-          static FILE* qtFilteredFile2 = NULL;
-          static bool qtFilteredFile2Opened = false;
-          if (!qtFilteredFile2Opened) {
-            qtFilteredFile2 = fopen("debug_qt_filtered.txt", "a");
-            qtFilteredFile2Opened = true;
-          }
-          
-          unsigned int line1Id = line1->id;
-          unsigned int line2Id = line2->id;
-          
-          // Log filtering for tracked pairs in frames 85, 89, and 95
-          bool isTrackedPair = false;
-          if (frameNumber == 85) {
-            if ((line1Id == 77 && line2Id == 393) || (line1Id == 393 && line2Id == 77) ||
-                (line1Id == 377 && line2Id == 393) || (line1Id == 393 && line2Id == 377) ||
-                (line1Id == 77 && line2Id == 377) || (line1Id == 377 && line2Id == 77)) {
-              isTrackedPair = true;
-            }
-          } else if (frameNumber == 89) {
-            if ((line1Id == 41 && line2Id == 105) || (line1Id == 105 && line2Id == 41) ||
-                (line1Id == 45 && line2Id == 105) || (line1Id == 105 && line2Id == 45) ||
-                (line1Id == 49 && line2Id == 105) || (line1Id == 105 && line2Id == 49) ||
-                (line1Id == 53 && line2Id == 105) || (line1Id == 105 && line2Id == 53) ||
-                (line1Id == 57 && line2Id == 105) || (line1Id == 105 && line2Id == 57) ||
-                (line1Id == 61 && line2Id == 105) || (line1Id == 105 && line2Id == 61) ||
-                (line1Id == 65 && line2Id == 105) || (line1Id == 105 && line2Id == 65) ||
-                (line1Id == 69 && line2Id == 105) || (line1Id == 105 && line2Id == 69) ||
-                (line1Id == 93 && line2Id == 105) || (line1Id == 105 && line2Id == 93) ||
-                (line1Id == 105 && line2Id == 137) || (line1Id == 137 && line2Id == 105)) {
-              isTrackedPair = true;
-            }
-          } else if (frameNumber == 95) {
-            if ((line1Id == 29 && line2Id == 89) || (line1Id == 89 && line2Id == 29) ||
-                (line1Id == 29 && line2Id == 77) || (line1Id == 77 && line2Id == 29)) {
-              isTrackedPair = true;
-            }
-          }
-          
-          if (isTrackedPair && qtFilteredFile2 != NULL) {
-            fprintf(qtFilteredFile2, "Frame %d: Filtered pair (line1 id=%u at idx=%u, line2 id=%u at idx=%u) - REASON: line1->id >= line2->id (wrong ID order)\n",
-                    frameNumber, line1Id, i, line2Id, line2ArrayIndex);
-            fflush(qtFilteredFile2);
-          }
-          #endif
           continue;
         }
         
