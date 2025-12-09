@@ -249,6 +249,9 @@ typedef struct {
   
   // Time step used during build (needed for correct redistribution during subdivision)
   double buildTimeStep;         // Time step from QuadTree_build()
+  
+  // Maximum velocity in system (computed during build, used for bounding box expansion)
+  double maxVelocity;           // Maximum velocity magnitude across all lines
 } QuadTree;
 
 /**

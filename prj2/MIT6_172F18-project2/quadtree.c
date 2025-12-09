@@ -666,6 +666,9 @@ QuadTreeError QuadTree_build(QuadTree* tree,
     maxVelocity = 1e-10;
   }
   
+  // Store maxVelocity in tree for use during query phase (avoids recomputing)
+  tree->maxVelocity = maxVelocity;
+  
   // CRITICAL FIX: Expand root bounds to include all lines
   // Compute actual bounds of all lines (including future positions)
   // This ensures lines outside the initial box bounds are included
@@ -886,14 +889,84 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     }
   }
   
-  // Build a map from Line* to array index for O(1) lookup
-  // This allows us to quickly check if line2 appears later in array than line1
-  // We use a hash-like approach: since lines are pointers, we can't easily hash them,
-  // but we can do a linear search once per line2 (still O(n) per line2, but cached)
-  // Actually, let's build a proper map: array of (Line*, index) pairs, sorted by pointer
-  // Or simpler: just do the lookup, but cache results per line2
-  // Actually simplest: build an array indexed by line pointer... but pointers aren't small integers
-  // So we'll stick with the linear search but optimize it
+  // CRITICAL PERFORMANCE FIX: Build Line* to array index hash map for O(1) lookup
+  // This eliminates the O(n) linear search that was happening for EVERY candidate pair
+  // We'll use a simple approach: since we have tree->lines array, we can build
+  // a reverse map. But actually, we can just use the fact that tree->lines[i] 
+  // gives us the line at index i. The problem is we need to find index given Line*.
+  // 
+  // Solution: Build a hash table or use a simpler approach - since lines are stored
+  // in tree->lines array, we can build a reverse lookup table.
+  // Actually, simplest: Build an array that maps Line* to index during initialization.
+  
+  // Allocate hash table: We'll use a simple approach - build array indexed by line pointer
+  // But pointers aren't small integers, so we need a hash table.
+  // For now, let's use a simpler approach: build a lookup array during initialization
+  // that we can use for O(1) lookup. Since we iterate through tree->lines anyway,
+  // we can build this map once.
+  
+  // Build Line* to array index map (O(n) once, then O(1) lookups)
+  // We'll use a simple linear array approach: for each line in tree->lines,
+  // we know its index. We need to map Line* -> index.
+  // Since we can't easily hash pointers, we'll use the fact that we iterate
+  // through candidates in order and can cache the lookup.
+  
+  // Actually, the REAL fix: Since we're iterating through tree->lines[i] for line1,
+  // and we get line2 from cells, we need to find line2's index. The issue is we
+  // do this for EVERY candidate pair, causing O(n² log n) complexity.
+  //
+  // Better solution: Build a hash table once, or use the fact that lines are
+  // stored in tree->lines. We can build a reverse index.
+  
+  // SIMPLEST FIX: Since tree->lines[i] contains the line at index i, and we
+  // iterate through it, we can build a reverse map. But we need O(1) lookup.
+  // 
+  // For now, let's optimize the linear search by breaking early and caching
+  // results per line2. Actually, we can build a proper hash table, but that's
+  // complex. Let's use a simpler approach: build an array that maps line pointer
+  // to index, but we need to handle pointer hashing.
+  
+  // ACTUAL FIX: Build reverse index array - but we need to handle that lines
+  // might not be in a contiguous range. Let's use a different approach:
+  // Instead of finding line2's index, we can just check if line2->id > line1->id
+  // and skip the array index check if we're careful about ordering.
+  
+  // WAIT - The array index check is to match brute-force order. But we can
+  // optimize this: Build a hash table once that maps Line* -> array index.
+  // Since C doesn't have built-in hash tables, we'll use a simple approach:
+  // Build an array indexed by some property of the line.
+  
+  // BEST FIX: Since we have line IDs, and we're already building maxLineId,
+  // we can build an array indexed by line ID that maps to array index.
+  // But wait - line IDs might not be contiguous or might not match array indices.
+  
+  // SIMPLEST WORKING FIX: Build a reverse lookup table once:
+  // For each line in tree->lines, store its index in a way we can look it up.
+  // We'll use a simple approach: iterate through tree->lines once to build
+  // a map. Since we can't easily hash Line* pointers, we'll use a linear
+  // search but cache results per line2 (so we only search once per unique line2).
+  
+  // ACTUALLY, THE REAL FIX: We don't need array index at all if we're careful!
+  // We can use line IDs to ensure ordering. But the issue is brute-force uses
+  // array index order. Let's build a proper solution:
+  
+  // Build Line* to array index map using a simple hash table approach
+  // We'll use line->id as the key since IDs are unique
+  unsigned int* lineIdToIndex = calloc(maxLineId + 1, sizeof(unsigned int));
+  if (lineIdToIndex == NULL) {
+    free(overlappingCells);
+    return QUADTREE_ERROR_MALLOC_FAILED;
+  }
+  // Initialize to invalid index (0 is valid, so use numLines+1 as sentinel)
+  for (unsigned int idx = 0; idx <= maxLineId; idx++) {
+    lineIdToIndex[idx] = tree->numLines + 1;  // Invalid index
+  }
+  // Build the map: for each line, store its array index
+  for (unsigned int idx = 0; idx < tree->numLines; idx++) {
+    if (tree->lines[idx] != NULL) {
+      lineIdToIndex[tree->lines[idx]->id] = idx;
+    }
+  }
   
   // Allocate a 2D boolean matrix to track all pairs we've seen globally
   // This ensures we never add the same pair twice, regardless of processing order
@@ -901,6 +974,7 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   // Access pattern: seenPairs[minId][maxId] for pair (minId, maxId)
   bool** seenPairs = calloc(maxLineId + 1, sizeof(bool*));
   if (seenPairs == NULL) {
+    free(lineIdToIndex);  // Fix memory leak: free lineIdToIndex before returning
     free(overlappingCells);
     return QUADTREE_ERROR_MALLOC_FAILED;
   }
@@ -912,6 +986,7 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         free(seenPairs[j]);
       }
       free(seenPairs);
+      free(lineIdToIndex);  // Fix memory leak: free lineIdToIndex before returning
       free(overlappingCells);
       return QUADTREE_ERROR_MALLOC_FAILED;
     }
@@ -941,24 +1016,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     // Compute line's bounding box
     // CRITICAL: Use buildTimeStep to match the timeStep used during build phase
     // This ensures bounding boxes are computed consistently between build and query
-    // TEST IMPLEMENTATION: Need maxVelocity and minCellSize for expansion
-    // TODO: Store maxVelocity in tree structure to avoid recomputing
-    double maxVelocity = 0.0;
-    for (unsigned int k = 0; k < tree->numLines; k++) {
-      if (tree->lines[k] != NULL) {
-        double v_mag = Vec_length(tree->lines[k]->velocity);
-        if (v_mag > maxVelocity) {
-          maxVelocity = v_mag;
-        }
-      }
-    }
-    if (maxVelocity == 0.0) {
-      maxVelocity = 1e-10;
-    }
+    // Use stored maxVelocity from build phase (avoids O(n) recomputation per line!)
     double lineXmin, lineXmax, lineYmin, lineYmax;
     computeLineBoundingBox(line1, tree->buildTimeStep,
                            &lineXmin, &lineXmax, &lineYmin, &lineYmax,
-                           maxVelocity, tree->config.minCellSize);
+                           tree->maxVelocity, tree->config.minCellSize);
     
     // Find all cells this line overlaps
     int numCells = findOverlappingCellsRecursive(tree->root,
@@ -972,6 +1034,7 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         free(seenPairs[i]);
       }
       free(seenPairs);
+      free(lineIdToIndex);  // Fix memory leak: free lineIdToIndex before returning
       free(overlappingCells);
       return QUADTREE_ERROR_MALLOC_FAILED;
     }
@@ -1007,16 +1070,14 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         
         // CRITICAL: Ensure line2 appears later in tree->lines than line1
         // This matches brute-force's iteration order (i < j)
-        unsigned int line2ArrayIndex = 0;
-        bool line2Found = false;
-        for (unsigned int k = 0; k < tree->numLines; k++) {
-          if (tree->lines[k] == line2) {
-            line2ArrayIndex = k;
-            line2Found = true;
-            break;
-          }
+        // PERFORMANCE FIX: Use O(1) hash lookup instead of O(n) linear search
+        // Fix buffer overflow: Check bounds before accessing array
+        if (line2->id > maxLineId) {
+          // line2->id is out of bounds for lineIdToIndex array - skip it
+          continue;
         }
-        if (!line2Found) {
+        unsigned int line2ArrayIndex = lineIdToIndex[line2->id];
+        if (line2ArrayIndex > tree->numLines) {
           // line2 is not in tree->lines - this shouldn't happen, but skip it
           continue;
         }
@@ -1075,6 +1136,7 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
               free(seenPairs[i]);
             }
             free(seenPairs);
+            free(lineIdToIndex);  // Fix memory leak: free lineIdToIndex before returning
             free(overlappingCells);
             return QUADTREE_ERROR_MALLOC_FAILED;
           }
@@ -1099,6 +1161,7 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     free(seenPairs[i]);
   }
   free(seenPairs);
+  free(lineIdToIndex);  // Free the reverse lookup table
   free(overlappingCells);
   return QUADTREE_SUCCESS;
 }
