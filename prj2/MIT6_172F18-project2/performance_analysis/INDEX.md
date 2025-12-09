@@ -18,11 +18,12 @@ This directory contains documentation of all performance debugging and optimizat
 **File:** [02-memory-safety-bugs.md](02-memory-safety-bugs.md)  
 **Date:** December 2025  
 **Status:** RESOLVED  
-**Summary:** Fixed two critical memory safety issues:
+**Summary:** Fixed three critical memory safety issues:
 - Bug #1: Memory leaks in error paths (lineIdToIndex not freed in 4 error paths)
 - Bug #2: Buffer overflow risk (array access without bounds checking)
+- Bug #3: Incorrect bounds check operator (`>` instead of `>=`)
 
-**Result:** Eliminated memory leaks and prevented potential buffer overflow. No performance impact.
+**Result:** Eliminated memory leaks, prevented buffer overflow, and fixed bounds check. No performance impact.
 
 ### 🔄 Session #3: (Future)
 **Status:** PENDING  
@@ -56,7 +57,8 @@ This directory contains documentation of all performance debugging and optimizat
 | maxVelocity recomputation | quadtree.c:947-957 | O(n²) | 1M ops for n=1000 | Store in tree |
 | Array index linear search | quadtree.c:1012-1018 | O(n² log n) | 14M ops for n=1000 | Build hash table |
 | Memory leak (error paths) | quadtree.c:976,982,1029,1125 | Memory leak | 4KB per error | Free in all paths |
-| Buffer overflow risk | quadtree.c:1071 | Undefined behavior | Potential crash | Bounds check |
+| Buffer overflow risk | quadtree.c:1075 | Undefined behavior | Potential crash | Bounds check |
+| Incorrect bounds check | quadtree.c:1080 | Out-of-bounds access | Potential crash | Change `>` to `>=` |
 
 ---
 

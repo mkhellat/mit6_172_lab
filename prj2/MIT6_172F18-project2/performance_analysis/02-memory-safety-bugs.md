@@ -10,10 +10,11 @@
 
 ### Bug Reports
 
-Two critical memory safety issues were identified in the `lineIdToIndex` hash table implementation:
+Three critical memory safety issues were identified in the `lineIdToIndex` hash table implementation:
 
 1. **Memory Leak (Bug #1):** `lineIdToIndex` allocated at line 955 is not freed in multiple error paths
 2. **Buffer Overflow (Bug #2):** Array access `lineIdToIndex[line2->id]` occurs without bounds checking
+3. **Incorrect Bounds Check (Bug #3):** Bounds check uses `>` instead of `>=`, allowing invalid index `tree->numLines` to pass
 
 ### Initial Code Review
 
@@ -28,6 +29,7 @@ unsigned int* lineIdToIndex = calloc(maxLineId + 1, sizeof(unsigned int));
 **Problem Areas:**
 - Error paths after allocation don't free `lineIdToIndex`
 - Array access without bounds validation
+- Incorrect bounds check operator (`>` instead of `>=`)
 
 ---
 
@@ -125,6 +127,38 @@ if (line2ArrayIndex > tree->numLines) {
 - Security risk (if attacker can control line IDs)
 - Undefined behavior makes debugging difficult
 
+### Bug #3: Incorrect Bounds Check Operator
+
+**Problem:** The bounds check for `line2ArrayIndex` uses `>` when it should use `>=`. Valid array indices for `tree->lines` range from `0` to `tree->numLines - 1`, so checking `if (line2ArrayIndex > tree->numLines)` fails to reject the invalid index value of `tree->numLines` itself.
+
+**Problematic Code:**
+```c
+// Line 1080
+unsigned int line2ArrayIndex = lineIdToIndex[line2->id];
+if (line2ArrayIndex > tree->numLines) {  // ❌ Should be >=
+  // line2 is not in tree->lines - this shouldn't happen, but skip it
+  continue;
+}
+```
+
+**Why This is Dangerous:**
+- Valid array indices: `[0, tree->numLines - 1]`
+- Invalid indices: `>= tree->numLines`
+- Current check `>` allows `line2ArrayIndex == tree->numLines` to pass
+- This would cause out-of-bounds access: `tree->lines[tree->numLines]`
+
+**Example:**
+For `tree->numLines = 100`:
+- Valid indices: `[0, 99]`
+- Invalid indices: `>= 100`
+- Current check: `line2ArrayIndex > 100` allows `100` to pass (BUG!)
+- Correct check: `line2ArrayIndex >= 100` rejects `100` (correct)
+
+**Impact:**
+- Potential out-of-bounds array access
+- Could cause segmentation fault or memory corruption
+- Undefined behavior
+
 ---
 
 ## 3. Solution Design
@@ -167,6 +201,31 @@ unsigned int line2ArrayIndex = lineIdToIndex[line2->id];
 - Prevents buffer overflow
 - Clear error handling (skip invalid line)
 - Defensive programming practice
+
+### Fix #3: Correct Bounds Check Operator
+
+**Approach:**
+Change the bounds check from `>` to `>=` to properly reject all invalid indices.
+
+**Implementation:**
+```c
+// BEFORE (BUG)
+if (line2ArrayIndex > tree->numLines) {
+  continue;
+}
+
+// AFTER (FIXED)
+if (line2ArrayIndex >= tree->numLines) {
+  // Note: >= catches both invalid index (tree->numLines) and sentinel (tree->numLines + 1)
+  continue;
+}
+```
+
+**Why >= is Correct:**
+- Valid indices: `[0, tree->numLines - 1]`
+- Invalid indices: `>= tree->numLines`
+- `>=` correctly rejects both `tree->numLines` (invalid) and `tree->numLines + 1` (sentinel)
+- `>` only rejects `> tree->numLines`, allowing `tree->numLines` to pass (bug)
 
 ---
 
@@ -315,8 +374,28 @@ if (line2->id > maxLineId) {
   continue;
 }
 unsigned int line2ArrayIndex = lineIdToIndex[line2->id];
-if (line2ArrayIndex > tree->numLines) {
+if (line2ArrayIndex >= tree->numLines) {
   // line2 is not in tree->lines - this shouldn't happen, but skip it
+  // Note: >= catches both invalid index (tree->numLines) and sentinel (tree->numLines + 1)
+  continue;
+}
+```
+
+#### Change 6: Fix bounds check operator
+
+**File:** `quadtree.c`, line 1080
+
+**Before:**
+```c
+if (line2ArrayIndex > tree->numLines) {  // ❌ BUG: allows tree->numLines to pass
+  continue;
+}
+```
+
+**After:**
+```c
+if (line2ArrayIndex >= tree->numLines) {  // ✅ FIXED: rejects all invalid indices
+  // Note: >= catches both invalid index (tree->numLines) and sentinel (tree->numLines + 1)
   continue;
 }
 ```
@@ -362,9 +441,17 @@ make clean && make
 
 **Test:** Verify bounds check is performed before array access
 
-**Method:** Code review of line 1071 access
+**Method:** Code review of line 1079 access
 
-**Result:** ✅ **PASSED** - Bounds check at line 1069-1072 validates `line2->id <= maxLineId` before accessing `lineIdToIndex[line2->id]`
+**Result:** ✅ **PASSED** - Bounds check at line 1075 validates `line2->id <= maxLineId` before accessing `lineIdToIndex[line2->id]`
+
+### Bounds Check Operator Verification
+
+**Test:** Verify bounds check uses correct operator (`>=` not `>`)
+
+**Method:** Code review of line 1080 check
+
+**Result:** ✅ **PASSED** - Bounds check at line 1080 uses `>=` operator, correctly rejecting all invalid indices including `tree->numLines`
 
 ---
 
@@ -393,6 +480,18 @@ make clean && make
 - Bounds check prevents overflow
 - Invalid lines are safely skipped
 - Defensive programming practice
+
+### Bounds Check Operator Fix Impact
+
+**Before Fix:**
+- Check `line2ArrayIndex > tree->numLines` allowed `tree->numLines` to pass
+- Could cause out-of-bounds access: `tree->lines[tree->numLines]`
+- Potential segmentation fault or memory corruption
+
+**After Fix:**
+- Check `line2ArrayIndex >= tree->numLines` correctly rejects all invalid indices
+- Prevents out-of-bounds array access
+- Properly handles both invalid index and sentinel value
 
 ### Performance Impact
 
@@ -452,12 +551,13 @@ make clean && make
 | Bug | Location | Issue | Fix |
 |-----|----------|-------|-----|
 | #1 | Lines 976, 982, 1029, 1125 | Memory leak in error paths | Added `free(lineIdToIndex)` in all 4 error paths |
-| #2 | Line 1071 | Buffer overflow risk | Added bounds check before array access |
+| #2 | Line 1075 | Buffer overflow risk | Added bounds check before array access |
+| #3 | Line 1080 | Incorrect bounds check operator | Changed `>` to `>=` to reject all invalid indices |
 
 ### Code Changes
 
 - **Files Modified:** `quadtree.c`
-- **Lines Changed:** 5 locations (4 memory leak fixes + 1 bounds check)
+- **Lines Changed:** 6 locations (4 memory leak fixes + 1 bounds check + 1 operator fix)
 - **Complexity:** O(1) additional operations (bounds check)
 - **Memory Impact:** Eliminated memory leaks, no performance impact
 

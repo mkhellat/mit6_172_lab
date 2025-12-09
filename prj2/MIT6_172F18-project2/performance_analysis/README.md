@@ -33,3 +33,11 @@ Each debugging session follows this structure:
 
 **Overall Result:** Quadtree transformed from slower in 5/7 cases to faster in 6/7 cases, with speedup improving from 1.18x max to 2.68x max.
 
+## Quick Reference: Memory Safety Issues Resolved
+
+| Issue | Impact | Fix | Result |
+|-------|--------|-----|--------|
+| Memory leak (error paths) | 4KB leak per error | Free in all error paths | Eliminated memory leaks |
+| Buffer overflow risk | Potential crash | Bounds check before access | Prevents overflow |
+| Incorrect bounds check | Out-of-bounds access | Change `>` to `>=` | Rejects all invalid indices |
+
