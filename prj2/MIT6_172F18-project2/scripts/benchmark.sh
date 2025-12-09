@@ -93,8 +93,9 @@ echo ""
 # Function to extract collision counts from output
 extract_collisions() {
     local output="$1"
-    local ll_coll=$(echo "$output" | grep -oP 'Line-Line Collisions: \K\d+' || echo "0")
-    local lw_coll=$(echo "$output" | grep -oP 'Line-Wall Collisions: \K\d+' || echo "0")
+    # Format is: "X Line-Line Collisions" and "X Line-Wall Collisions"
+    local ll_coll=$(echo "$output" | grep -oP '\d+ Line-Line Collisions' | grep -oP '^\d+' || echo "0")
+    local lw_coll=$(echo "$output" | grep -oP '\d+ Line-Wall Collisions' | grep -oP '^\d+' || echo "0")
     echo "$ll_coll $lw_coll"
 }
 
