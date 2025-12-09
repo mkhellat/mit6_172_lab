@@ -1077,8 +1077,9 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           continue;
         }
         unsigned int line2ArrayIndex = lineIdToIndex[line2->id];
-        if (line2ArrayIndex > tree->numLines) {
+        if (line2ArrayIndex >= tree->numLines) {
           // line2 is not in tree->lines - this shouldn't happen, but skip it
+          // Note: >= catches both invalid index (tree->numLines) and sentinel (tree->numLines + 1)
           continue;
         }
         if (line2ArrayIndex <= i) {
