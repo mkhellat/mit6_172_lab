@@ -626,20 +626,9 @@ static QuadTreeError insertLineRecursive(QuadNode* node,
                                                lineXmin, lineXmax,
                                                lineYmin, lineYmax, tree);
     if (result != QUADTREE_SUCCESS) {
-      #ifdef DEBUG_QUADTREE_TIMING
-      fasttime_t end_build = gettime();
-      double build_time = tdiff(start_build, end_build);
-      fprintf(stderr, "BUILD PHASE TIMING: %.6fs (FAILED)\n", build_time);
-      #endif
       return result;
     }
   }
-  
-  #ifdef DEBUG_QUADTREE_TIMING
-  fasttime_t end_build = gettime();
-  double build_time = tdiff(start_build, end_build);
-  fprintf(stderr, "BUILD PHASE TIMING: %.6fs\n", build_time);
-  #endif
   
   return QUADTREE_SUCCESS;
 }
@@ -664,11 +653,6 @@ QuadTreeError QuadTree_build(QuadTree* tree,
   tree->lines = lines;
   tree->numLines = numLines;
   tree->buildTimeStep = timeStep;  // Store for use during subdivision
-  
-  #ifdef DEBUG_QUADTREE_TIMING
-  // Store start time in tree for later reporting (we'll add a field or use stats)
-  // For now, we'll report at the end of build
-  #endif
   
   // TEST IMPLEMENTATION: Compute maximum velocity in system for AABB expansion
   // This is needed for the velocity-dependent expansion in computeLineBoundingBox
@@ -698,29 +682,43 @@ QuadTreeError QuadTree_build(QuadTree* tree,
   double actualYmin = tree->worldYmax;
   double actualYmax = tree->worldYmin;
   
-  // Compute bounding boxes for all lines and find actual bounds
+  // OPTIMIZATION #1: Cache bounding boxes to avoid recomputing during insertion
+  // Allocate array to store bounding boxes for all lines
+  typedef struct {
+    double xmin, xmax, ymin, ymax;
+  } BoundingBox;
+  
+  BoundingBox* bboxes = malloc(numLines * sizeof(BoundingBox));
+  if (bboxes == NULL) {
+    return QUADTREE_ERROR_MALLOC_FAILED;
+  }
+  
+  // First pass: Compute and cache bounding boxes, find actual bounds
   for (unsigned int i = 0; i < numLines; i++) {
     if (lines[i] == NULL) {
+      // Mark as invalid (we'll skip during insertion)
+      bboxes[i].xmin = bboxes[i].xmax = bboxes[i].ymin = bboxes[i].ymax = 0.0;
       continue;
     }
     
-    double lineXmin, lineXmax, lineYmin, lineYmax;
+    // Compute and cache bounding box
     computeLineBoundingBox(lines[i], timeStep,
-                           &lineXmin, &lineXmax, &lineYmin, &lineYmax,
+                           &bboxes[i].xmin, &bboxes[i].xmax,
+                           &bboxes[i].ymin, &bboxes[i].ymax,
                            maxVelocity, tree->config.minCellSize);
     
     // Expand bounds to include this line's bbox
-    if (lineXmin < actualXmin) {
-      actualXmin = lineXmin;
+    if (bboxes[i].xmin < actualXmin) {
+      actualXmin = bboxes[i].xmin;
     }
-    if (lineXmax > actualXmax) {
-      actualXmax = lineXmax;
+    if (bboxes[i].xmax > actualXmax) {
+      actualXmax = bboxes[i].xmax;
     }
-    if (lineYmin < actualYmin) {
-      actualYmin = lineYmin;
+    if (bboxes[i].ymin < actualYmin) {
+      actualYmin = bboxes[i].ymin;
     }
-    if (lineYmax > actualYmax) {
-      actualYmax = lineYmax;
+    if (bboxes[i].ymax > actualYmax) {
+      actualYmax = bboxes[i].ymax;
     }
   }
   
@@ -771,23 +769,19 @@ QuadTreeError QuadTree_build(QuadTree* tree,
     tree->stats->totalLeaves = 1;
   }
   
-  // Insert each line
+  // Second pass: Insert each line using cached bounding boxes
   for (unsigned int i = 0; i < numLines; i++) {
     if (lines[i] == NULL) {
       continue;  // Skip NULL lines
     }
     
-    // Compute line's bounding box
-    double lineXmin, lineXmax, lineYmin, lineYmax;
-    computeLineBoundingBox(lines[i], timeStep,
-                           &lineXmin, &lineXmax, &lineYmin, &lineYmax,
-                           maxVelocity, tree->config.minCellSize);
-    
-    // Insert into tree
+    // OPTIMIZATION #1: Use cached bounding box instead of recomputing
+    // Insert into tree using cached bounding box
     QuadTreeError result = insertLineRecursive(tree->root, lines[i],
-                                               lineXmin, lineXmax,
-                                               lineYmin, lineYmax, tree);
+                                               bboxes[i].xmin, bboxes[i].xmax,
+                                               bboxes[i].ymin, bboxes[i].ymax, tree);
     if (result != QUADTREE_SUCCESS) {
+      free(bboxes);  // Free cache before returning on error
       return result;
     }
     
@@ -797,8 +791,8 @@ QuadTreeError QuadTree_build(QuadTree* tree,
       // it's likely in multiple cells
       double worldWidth = tree->worldXmax - tree->worldXmin;
       double worldHeight = tree->worldYmax - tree->worldYmin;
-      double lineWidth = lineXmax - lineXmin;
-      double lineHeight = lineYmax - lineYmin;
+      double lineWidth = bboxes[i].xmax - bboxes[i].xmin;
+      double lineHeight = bboxes[i].ymax - bboxes[i].ymin;
       
       // If line is large relative to world, it likely spans cells
       if (lineWidth > worldWidth * 0.1 || lineHeight > worldHeight * 0.1) {
@@ -806,6 +800,17 @@ QuadTreeError QuadTree_build(QuadTree* tree,
       }
     }
   }
+  
+  // Free bounding box cache
+  free(bboxes);
+  
+  #ifdef DEBUG_QUADTREE_TIMING
+  {
+    fasttime_t end_build = gettime();
+    double build_time = tdiff(start_build, end_build);
+    fprintf(stderr, "BUILD PHASE TIMING: %.6fs\n", build_time);
+  }
+  #endif
   
   return QUADTREE_SUCCESS;
 }
