@@ -35,6 +35,7 @@
 
 #include "./line.h"
 #include "./vec.h"
+#include "./fasttime.h"  // For timing instrumentation
 
 // Debug flag for discrepancy investigation
 // When enabled, logs cell assignments and candidate pairs for specific frames
@@ -625,9 +626,20 @@ static QuadTreeError insertLineRecursive(QuadNode* node,
                                                lineXmin, lineXmax,
                                                lineYmin, lineYmax, tree);
     if (result != QUADTREE_SUCCESS) {
+      #ifdef DEBUG_QUADTREE_TIMING
+      fasttime_t end_build = gettime();
+      double build_time = tdiff(start_build, end_build);
+      fprintf(stderr, "BUILD PHASE TIMING: %.6fs (FAILED)\n", build_time);
+      #endif
       return result;
     }
   }
+  
+  #ifdef DEBUG_QUADTREE_TIMING
+  fasttime_t end_build = gettime();
+  double build_time = tdiff(start_build, end_build);
+  fprintf(stderr, "BUILD PHASE TIMING: %.6fs\n", build_time);
+  #endif
   
   return QUADTREE_SUCCESS;
 }
@@ -636,6 +648,10 @@ QuadTreeError QuadTree_build(QuadTree* tree,
                              Line** lines,
                              unsigned int numLines,
                              double timeStep) {
+  #ifdef DEBUG_QUADTREE_TIMING
+  fasttime_t start_build = gettime();
+  #endif
+  
   if (tree == NULL) {
     return QUADTREE_ERROR_NULL_POINTER;
   }
@@ -648,6 +664,11 @@ QuadTreeError QuadTree_build(QuadTree* tree,
   tree->lines = lines;
   tree->numLines = numLines;
   tree->buildTimeStep = timeStep;  // Store for use during subdivision
+  
+  #ifdef DEBUG_QUADTREE_TIMING
+  // Store start time in tree for later reporting (we'll add a field or use stats)
+  // For now, we'll report at the end of build
+  #endif
   
   // TEST IMPLEMENTATION: Compute maximum velocity in system for AABB expansion
   // This is needed for the velocity-dependent expansion in computeLineBoundingBox
@@ -843,6 +864,10 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
                                           double timeStep,
                                           QuadTreeCandidateList* candidateList,
                                           int frameNumber) {
+  #ifdef DEBUG_QUADTREE_TIMING
+  fasttime_t start_query = gettime();
+  #endif
+  
   if (tree == NULL) {
     return QUADTREE_ERROR_NULL_POINTER;
   }
@@ -1157,6 +1182,75 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   // Update statistics
   updateStatsOnQuery(tree, totalCellsChecked, totalPairsFound);
   
+  // STEP 1: Instrument candidate pair generation statistics
+  #ifdef DEBUG_QUADTREE_STATS
+  {
+    unsigned long long expectedPairs = ((unsigned long long)tree->numLines * 
+                                       (tree->numLines - 1)) / 2;
+    double expectedCandidates = tree->numLines * log2((double)tree->numLines);
+    double expectedRatio = (2.0 * log2((double)tree->numLines)) / tree->numLines * 100.0;
+    double actualRatio = (candidateList->count * 100.0) / (expectedPairs > 0 ? expectedPairs : 1);
+    double ratioGap = (expectedRatio > 0) ? actualRatio / expectedRatio : 0.0;
+    double avgCellsPerLine = (tree->numLines > 0) ? (double)totalCellsChecked / tree->numLines : 0.0;
+    
+    fprintf(stderr, "===== QUADTREE CANDIDATE PAIR STATISTICS (Step 1) =====\n");
+    fprintf(stderr, "Input: n=%u lines\n", tree->numLines);
+    fprintf(stderr, "Brute-force pairs: %llu\n", expectedPairs);
+    fprintf(stderr, "Candidate pairs generated: %u\n", candidateList->count);
+    fprintf(stderr, "Expected candidates (n*log2(n)): ~%.0f\n", expectedCandidates);
+    fprintf(stderr, "Expected ratio: %.2f%%\n", expectedRatio);
+    fprintf(stderr, "Actual ratio: %.2f%%\n", actualRatio);
+    fprintf(stderr, "Ratio gap: %.1fx (actual/expected)\n", ratioGap);
+    fprintf(stderr, "Average cells per line: %.2f\n", avgCellsPerLine);
+    fprintf(stderr, "======================================================\n");
+  }
+  #endif
+  
+  // STEP 2: Instrument query phase timing
+  #ifdef DEBUG_QUADTREE_TIMING
+  fasttime_t end_query = gettime();
+  double query_time = tdiff(start_query, end_query);
+  #endif
+  
+  // STEP 3: Instrument tree structure analysis
+  #ifdef DEBUG_QUADTREE_STATS
+  {
+    // Use existing stats if available
+    if (tree->stats != NULL) {
+      unsigned int totalNodes = tree->stats->totalNodes;
+      unsigned int totalLeaves = tree->stats->totalLeaves;
+      unsigned int maxDepth = tree->stats->maxDepthReached;
+      unsigned int maxLinesInNode = tree->stats->maxLinesInNode;
+      unsigned int emptyCells = tree->stats->emptyCells;
+      
+      double avgLinesPerLeaf = (totalLeaves > 0) ? (double)tree->numLines / totalLeaves : 0.0;
+      double expectedDepth = log2((double)tree->numLines) / 2.0;  // log4(n) = log2(n)/2
+      double depthRatio = (expectedDepth > 0) ? (double)maxDepth / expectedDepth : 0.0;
+      
+      fprintf(stderr, "===== QUADTREE STRUCTURE ANALYSIS (Step 3) =====\n");
+      fprintf(stderr, "Tree Structure:\n");
+      fprintf(stderr, "  Total nodes: %u\n", totalNodes);
+      fprintf(stderr, "  Leaf nodes: %u\n", totalLeaves);
+      fprintf(stderr, "  Max depth reached: %u\n", maxDepth);
+      fprintf(stderr, "  Expected depth (log4(n)): ~%.1f\n", expectedDepth);
+      fprintf(stderr, "  Depth ratio: %.2fx (actual/expected)\n", depthRatio);
+      fprintf(stderr, "  Max lines in any node: %u\n", maxLinesInNode);
+      fprintf(stderr, "  Average lines per leaf: %.2f\n", avgLinesPerLeaf);
+      fprintf(stderr, "  Empty cells: %u (%.1f%%)\n", emptyCells, 
+              (totalNodes > 0) ? (emptyCells * 100.0 / totalNodes) : 0.0);
+      fprintf(stderr, "  Lines in tree: %u\n", tree->numLines);
+      fprintf(stderr, "===============================================\n");
+    } else {
+      // Stats not enabled, print basic info
+      fprintf(stderr, "===== QUADTREE STRUCTURE ANALYSIS (Step 3) =====\n");
+      fprintf(stderr, "Tree Structure:\n");
+      fprintf(stderr, "  Lines in tree: %u\n", tree->numLines);
+      fprintf(stderr, "  NOTE: Enable debug stats in config for detailed analysis\n");
+      fprintf(stderr, "===============================================\n");
+    }
+  }
+  #endif
+  
   // Free pair tracking matrix
   for (unsigned int i = 0; i <= maxLineId; i++) {
     free(seenPairs[i]);
@@ -1164,6 +1258,12 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   free(seenPairs);
   free(lineIdToIndex);  // Free the reverse lookup table
   free(overlappingCells);
+  
+  #ifdef DEBUG_QUADTREE_TIMING
+  // Report query timing
+  fprintf(stderr, "QUERY PHASE TIMING: %.6fs\n", query_time);
+  #endif
+  
   return QUADTREE_SUCCESS;
 }
 

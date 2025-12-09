@@ -32,6 +32,7 @@
 #include "./intersection_event_list.h"
 #include "./line.h"
 #include "./quadtree.h"
+#include "./fasttime.h"  // For timing instrumentation
 
 
 // Comparison function for qsort to sort candidate pairs
@@ -298,10 +299,17 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           // Sort by line1->id, then line2->id (matching brute-force nested loop order)
           // CRITICAL: Use qsort (O(n log n)) instead of bubble sort (O(n^2))
           // to avoid negating the quadtree's performance benefits
+          #ifdef DEBUG_QUADTREE_TIMING
+          fasttime_t start_sort = gettime();
+          #endif
           if (candidateList.count > 0) {
             qsort(candidateList.pairs, candidateList.count, 
                   sizeof(QuadTreeCandidatePair), compareCandidatePairs);
           }
+          #ifdef DEBUG_QUADTREE_TIMING
+          fasttime_t end_sort = gettime();
+          double sort_time = tdiff(start_sort, end_sort);
+          #endif
           
           // Test candidate pairs using existing intersect() function
           // This is the TEST PHASE: spatial filtering already done in query phase
@@ -309,6 +317,9 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           quadtreePairsTested += candidateList.count;
           #endif
           
+          #ifdef DEBUG_QUADTREE_TIMING
+          fasttime_t start_test = gettime();
+          #endif
           
           // Test candidate pairs - quadtree.c already prevents duplicates using seenPairs matrix
           // No need for additional duplicate checking here
@@ -336,6 +347,18 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
               #endif
             }
           }
+          
+          #ifdef DEBUG_QUADTREE_TIMING
+          fasttime_t end_test = gettime();
+          double test_time = tdiff(start_test, end_test);
+          
+          // STEP 2: Report complete time breakdown
+          fprintf(stderr, "===== QUADTREE TIME BREAKDOWN (Step 2) =====\n");
+          fprintf(stderr, "Sort phase: %.6fs\n", sort_time);
+          fprintf(stderr, "Test phase: %.6fs\n", test_time);
+          fprintf(stderr, "==========================================\n");
+          fprintf(stderr, "NOTE: Build and Query phase timings reported in quadtree.c\n");
+          #endif
           
           // Debug: Print quadtree statistics for performance analysis
           #ifdef DEBUG_QUADTREE_STATS
