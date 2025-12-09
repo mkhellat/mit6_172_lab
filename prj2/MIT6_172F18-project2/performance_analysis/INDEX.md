@@ -25,9 +25,28 @@ This directory contains documentation of all performance debugging and optimizat
 
 **Result:** Eliminated memory leaks, prevented buffer overflow, and fixed bounds check. No performance impact.
 
-### 🔄 Session #3: (Future)
-**Status:** PENDING  
-**Focus:** TBD
+### ✅ Session #3: Build Phase Analysis and Optimization
+**File:** [03-candidate-pair-analysis.md](03-candidate-pair-analysis.md)  
+**Date:** December 2025  
+**Status:** RESOLVED  
+**Summary:** Identified build phase as primary bottleneck (84-91% of time) and implemented bounding box caching:
+- Fixed build phase timing instrumentation
+- Implemented Optimization #1: Cache bounding boxes to eliminate redundant computation
+- Discovered candidate generation is near-optimal (0.9x-1.2x ratio gap)
+- Tree structure is appropriate (depth ratios 0.78x-1.01x)
+
+**Result:** Mixed results from bounding box caching (build time increased slightly), but identified the real bottleneck was O(n²) bug in insertLineRecursive.
+
+### ✅ Session #4: Critical O(n²) Bug in insertLineRecursive
+**File:** [04-critical-on2-bug-fix.md](04-critical-on2-bug-fix.md)  
+**Date:** December 2025  
+**Status:** RESOLVED  
+**Summary:** Fixed critical O(n²) bug where maxVelocity was recomputed for every line during subdivision:
+- Bug: insertLineRecursive recomputed maxVelocity O(n) times per line during subdivision
+- Fix: Use precomputed tree->maxVelocity instead
+- Impact: Eliminated 75% performance overhead (hypot was 75.16% of time)
+
+**Result:** **10.3x improvement, 25.7x speedup vs brute-force!** Quadtree now faster in 7/7 cases (100%).
 
 ---
 
@@ -43,10 +62,12 @@ This directory contains documentation of all performance debugging and optimizat
 - Maximum speedup: 2.68x
 - Worst case: 0.60x (1.67x slower)
 
-### Target (Future Optimizations)
-- Quadtree faster: 7/7 cases (100%)
-- Maximum speedup: > 3x
-- Adaptive selection for edge cases
+### After Session #4 Fixes (Critical O(n²) Bug)
+- Quadtree faster: **7/7 cases (100%)** ✅
+- Maximum speedup: **24.45x** (koch.in)
+- Minimum speedup: **1.99x** (box.in)
+- Average speedup: **7.2x**
+- **Achieved theoretical performance!**
 
 ---
 
@@ -54,8 +75,9 @@ This directory contains documentation of all performance debugging and optimizat
 
 | Bug | Location | Complexity | Impact | Fix |
 |-----|----------|------------|--------|-----|
-| maxVelocity recomputation | quadtree.c:947-957 | O(n²) | 1M ops for n=1000 | Store in tree |
+| maxVelocity recomputation (query) | quadtree.c:947-957 | O(n²) | 1M ops for n=1000 | Store in tree |
 | Array index linear search | quadtree.c:1012-1018 | O(n² log n) | 14M ops for n=1000 | Build hash table |
+| maxVelocity recomputation (build) | quadtree.c:591-598 | O(n²) | 75% overhead, millions of hypot calls | Use tree->maxVelocity |
 | Memory leak (error paths) | quadtree.c:976,982,1029,1125 | Memory leak | 4KB per error | Free in all paths |
 | Buffer overflow risk | quadtree.c:1075 | Undefined behavior | Potential crash | Bounds check |
 | Incorrect bounds check | quadtree.c:1080 | Out-of-bounds access | Potential crash | Change `>` to `>=` |
@@ -79,7 +101,7 @@ Each debugging session follows this process:
 ## Tools Used
 
 - **Benchmarking:** `scripts/benchmark.sh` - Automated performance testing
-- **Profiling:** (Future: perf, valgrind, etc.)
+- **Profiling:** `perf` - CPU profiling to identify bottlenecks (Session #4)
 - **Code Analysis:** Manual code review, complexity analysis
 - **Verification:** Correctness checks, performance benchmarks
 

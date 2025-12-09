@@ -8,8 +8,11 @@ The quadtree implementation initially showed poor performance, often being slowe
 
 ## Structure
 
-- `01-initial-performance-bugs.md` - First performance debugging session (O(n²) bugs in query phase)
-- `02-*.md` - Future performance debugging sessions (to be added)
+- `01-initial-performance-bugs.md` - Session #1: O(n²) bugs in query phase
+- `02-memory-safety-bugs.md` - Session #2: Memory safety issues
+- `03-candidate-pair-analysis.md` - Session #3: Build phase analysis and optimization
+- `04-critical-on2-bug-fix.md` - Session #4: Critical O(n²) bug in insertLineRecursive
+- `INDEX.md` - Index of all sessions and quick reference
 
 ## Process
 
@@ -28,10 +31,11 @@ Each debugging session follows this structure:
 
 | Issue | Impact | Fix | Result |
 |-------|--------|-----|--------|
-| maxVelocity recomputation | O(n²) overhead | Compute once, store in tree | Eliminated 1M ops for n=1000 |
+| maxVelocity recomputation (query) | O(n²) overhead | Compute once, store in tree | Eliminated 1M ops for n=1000 |
 | Array index linear search | O(n² log n) overhead | Build hash table for O(1) lookup | Eliminated 14M ops for n=1000 |
+| maxVelocity recomputation (build) | O(n²) overhead, 75% of time | Use tree->maxVelocity | **10.3x improvement, 25.7x speedup** |
 
-**Overall Result:** Quadtree transformed from slower in 5/7 cases to faster in 6/7 cases, with speedup improving from 1.18x max to 2.68x max.
+**Overall Result:** Quadtree transformed from slower in 5/7 cases to faster in **7/7 cases (100%)**, with speedup improving from 1.18x max to **24.45x max**. Achieved theoretical performance!
 
 ## Quick Reference: Memory Safety Issues Resolved
 
