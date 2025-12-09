@@ -1,0 +1,13 @@
+Collision Detection Performance Benchmark
+Generated: Tue Dec  9 08:35:18 AM +0330 2025
+Frames per test: 1000
+
+Input              Lines     BF(s)    QT(s)  Spdup    BF-LL    QT-LL  OK  
+==========================================================================
+beaver.in          294      2.0488   1.3566   1.51      758      758  ✓
+box.in             401      3.7522   2.4976   1.50    36943    36943  ✓
+explosion.in       601      9.1289   8.1898   1.11    16833    16833  ✓
+koch.in            3901   416.9027 182.5948   2.28     5247     5247  ✓
+mit.in             810     16.9254  16.2095   1.04     2088     2088  ✓
+sin_wave.in        1181    33.4223  12.4891   2.68   279712   279712  ✓
+smalllines.in      530      7.3650  12.1830   0.60    77711    77711  ✓
