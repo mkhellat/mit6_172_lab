@@ -580,27 +580,15 @@ static QuadTreeError insertLineRecursive(QuadNode* node,
       // Redistribute existing lines to children
       // CRITICAL: Use the same timeStep that was used during initial build
       // This ensures bounding boxes are computed consistently
+      // CRITICAL PERFORMANCE FIX: Use stored maxVelocity from tree (computed once in QuadTree_build)
+      // instead of recomputing it O(n) times for every line during subdivision
       for (unsigned int i = 0; i < node->numLines; i++) {
         Line* existingLine = node->lines[i];
         double exmin, exmax, eymin, eymax;
-        // Use the timeStep from build phase (stored in tree structure)
-        // TEST IMPLEMENTATION: Need to compute maxVelocity for expansion
-        // For now, we'll compute it on-the-fly (inefficient but works for testing)
-        // TODO: Store maxVelocity in tree structure for efficiency
-        double maxVelocity = 0.0;
-        for (unsigned int k = 0; k < tree->numLines; k++) {
-          if (tree->lines[k] != NULL) {
-            double v_mag = Vec_length(tree->lines[k]->velocity);
-            if (v_mag > maxVelocity) {
-              maxVelocity = v_mag;
-            }
-          }
-        }
-        if (maxVelocity == 0.0) {
-          maxVelocity = 1e-10;
-        }
+        // Use the timeStep and maxVelocity from build phase (stored in tree structure)
+        // This avoids O(n²) Vec_length calls during subdivision
         computeLineBoundingBox(existingLine, tree->buildTimeStep, &exmin, &exmax,
-                               &eymin, &eymax, maxVelocity, tree->config.minCellSize);
+                               &eymin, &eymax, tree->maxVelocity, tree->config.minCellSize);
         
         for (int j = 0; j < 4; j++) {
           insertLineRecursive(node->children[j], existingLine,
