@@ -76,20 +76,28 @@ IntersectionType intersect(Line *l1, Line *l2, double time) {
     return NO_INTERSECTION;
   }
 
-  double angle = Vec_angle(v1, v2);
+  // OPTIMIZATION: Use cross product to determine angle sign instead of expensive atan2 calls
+  // Vec_angle(v1, v2) = atan2(v1.y, v1.x) - atan2(v2.y, v2.x)
+  // We only need the sign (angle < 0 or angle > 0), which we can get from cross product:
+  // crossProduct(v1, v2) = v1.x * v2.y - v1.y * v2.x
+  // If crossProduct > 0, angle > 0 (counterclockwise)
+  // If crossProduct < 0, angle < 0 (clockwise)
+  // This avoids two expensive atan2() calls!
+  double cross = Vec_crossProduct(v1, v2);
+  bool angle_positive = (cross > 0.0);
 
   if (top_intersected) {
-    if (angle < 0) {
+    if (!angle_positive) {  // angle < 0
       return L2_WITH_L1;
-    } else {
+    } else {  // angle >= 0
       return L1_WITH_L2;
     }
   }
 
   if (bottom_intersected) {
-    if (angle > 0) {
+    if (angle_positive) {  // angle > 0
       return L2_WITH_L1;
-    } else {
+    } else {  // angle <= 0
       return L1_WITH_L2;
     }
   }

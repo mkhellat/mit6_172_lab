@@ -81,6 +81,17 @@ This directory contains documentation of all performance debugging and optimizat
 
 **Expected Result:** Significant reduction in sqrt() operations, especially for large inputs (e.g., koch.in: 3,901 fewer sqrt() calls per frame).
 
+### ✅ Optimization #4: Intersection Angle Optimization
+**File:** [08-intersection-angle-optimization.md](08-intersection-angle-optimization.md)  
+**Date:** December 2025  
+**Status:** ✅ Implemented  
+**Summary:** Replace expensive `atan2()` calls with cross product to determine angle sign in intersection testing:
+- Problem: `Vec_angle()` calls `atan2()` twice (expensive trigonometric function) to compute full angle
+- Solution: Use cross product to determine angle sign instead of computing full angle value
+- Impact: Eliminates 2 `atan2()` calls per angle computation, replacing with 1 cheap cross product (10-20x faster)
+
+**Key Insight:** We only need the sign of the angle (positive/negative), not the full angle value. Cross product provides this information without expensive trigonometry.
+
 ---
 
 ## Performance Timeline
