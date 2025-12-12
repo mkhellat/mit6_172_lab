@@ -128,6 +128,10 @@ void CollisionWorld_updatePosition(CollisionWorld* collisionWorld) {
     // Since lines are rigid bodies, length is constant, but we recompute
     // after position updates to ensure correctness.
     line->cachedLength = Vec_length(Vec_subtract(line->p1, line->p2));
+    // Precompute velocity magnitude once per frame (used in bounding box calculations).
+    // Since velocity doesn't change during a frame (only position changes),
+    // we compute it once here to avoid expensive sqrt operations.
+    line->cachedVelocityMagnitude = Vec_length(line->velocity);
   }
 }
 

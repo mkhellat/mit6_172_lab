@@ -66,6 +66,12 @@ struct Line {
   // Since lines are rigid bodies, length is constant, but we recompute it
   // after position updates to ensure correctness.
   double cachedLength;
+
+  // Cached velocity magnitude (speed of the line).
+  // This is precomputed to avoid expensive sqrt operations during bounding box
+  // calculations. Since velocity doesn't change during a frame (only position
+  // changes), we compute it once per frame in updatePosition().
+  double cachedVelocityMagnitude;
 };
 typedef struct Line Line;
 

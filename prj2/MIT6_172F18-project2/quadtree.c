@@ -139,7 +139,8 @@ static void computeLineBoundingBox(const Line* line, double timeStep,
   // Accounts for maximum relative velocity between lines
   // If line has velocity v, relative velocity with another line can be up to ~2*v_max
   // We expand by a fraction of the line's velocity magnitude
-  double velocity_magnitude = Vec_length(line->velocity);
+  // OPTIMIZATION: Use cached velocity magnitude to avoid expensive sqrt operation
+  double velocity_magnitude = line->cachedVelocityMagnitude;
   const double k_rel = 0.3;  // TEST PARAMETER: Relative motion factor (tunable: 0.2-0.5)
   double relative_motion_expansion = velocity_magnitude * timeStep * k_rel;
   

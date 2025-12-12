@@ -97,6 +97,8 @@ void LineDemo_createLines(LineDemo* lineDemo) {
 
     // Initialize cached line length (optimization: precompute to avoid expensive sqrt in collision solver)
     line->cachedLength = Vec_length(Vec_subtract(line->p1, line->p2));
+    // Initialize cached velocity magnitude (optimization: precompute to avoid expensive sqrt in bounding box calculations)
+    line->cachedVelocityMagnitude = Vec_length(line->velocity);
 
     // transfer ownership of line to collisionWorld
     CollisionWorld_addLine(lineDemo->collisionWorld, line);

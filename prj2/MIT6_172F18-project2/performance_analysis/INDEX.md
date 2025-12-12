@@ -70,6 +70,17 @@ This directory contains documentation of all performance debugging and optimizat
 
 **Key Finding:** Current default maxDepth=12 is optimal for large inputs (koch.in, 3901 lines), which are most performance-critical. Small inputs benefit from maxDepth=10 (18% faster), but overall default is well-chosen.
 
+### ✅ Optimization #3: Velocity Magnitude Caching
+**File:** [07-velocity-magnitude-caching.md](07-velocity-magnitude-caching.md)  
+**Date:** December 2025  
+**Status:** ✅ Implemented  
+**Summary:** Precompute and cache velocity magnitude to eliminate expensive sqrt() operations in bounding box calculations:
+- Problem: Velocity magnitude computed twice per line per frame (build + query phases) using expensive `Vec_length()`
+- Solution: Add `cachedVelocityMagnitude` field to Line struct, compute once per frame in `updatePosition()`
+- Impact: Eliminates 50% of sqrt() calls for velocity magnitude (from 2n to n per frame)
+
+**Expected Result:** Significant reduction in sqrt() operations, especially for large inputs (e.g., koch.in: 3,901 fewer sqrt() calls per frame).
+
 ---
 
 ## Performance Timeline
