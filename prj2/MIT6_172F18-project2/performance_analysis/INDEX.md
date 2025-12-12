@@ -92,6 +92,18 @@ This directory contains documentation of all performance debugging and optimizat
 
 **Key Insight:** We only need the sign of the angle (positive/negative), not the full angle value. Cross product provides this information without expensive trigonometry.
 
+### 📋 Optimization #5: Incremental Quadtree Updates
+**File:** [09-incremental-updates-design.md](09-incremental-updates-design.md), [09-incremental-updates-analysis.md](09-incremental-updates-analysis.md)  
+**Date:** December 2025  
+**Status:** 📋 Design Documented, Implementation Deferred  
+**Summary:** Design for incremental quadtree updates instead of full rebuild each frame:
+- Problem: Quadtree rebuilt every frame (O(n log n) cost) even when few lines moved
+- Solution: Keep tree alive, track old positions, update only moved lines (O(log n) per moved line)
+- Complexity: High - correctness-critical, many edge cases
+- Status: Design documented, implementation deferred due to complexity and uncertain benefit
+
+**Recommendation:** Document design for future implementation. Focus on simpler optimizations first. Implement if build phase becomes bottleneck or profiling shows significant benefit.
+
 ---
 
 ## Performance Timeline
