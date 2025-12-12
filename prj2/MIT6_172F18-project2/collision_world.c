@@ -234,6 +234,17 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
     // Create quadtree with world bounds
     QuadTreeError error;
     QuadTreeConfig config = QuadTreeConfig_default();
+    
+    // Allow maxDepth to be overridden via environment variable for tuning
+    // This enables benchmarking different maxDepth values without code changes
+    const char* maxDepthEnv = getenv("QUADTREE_MAXDEPTH");
+    if (maxDepthEnv != NULL) {
+      unsigned int customMaxDepth = (unsigned int)atoi(maxDepthEnv);
+      if (customMaxDepth > 0) {
+        config.maxDepth = customMaxDepth;
+      }
+    }
+    
     // Enable debug stats for performance analysis (can be disabled in production)
     config.enableDebugStats = true;  // Set to true for debugging
     

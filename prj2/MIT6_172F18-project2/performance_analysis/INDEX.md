@@ -59,6 +59,17 @@ This directory contains documentation of all performance debugging and optimizat
 
 **Expected Result:** Significant reduction in sqrt() operations, especially for inputs with many collisions (e.g., sin_wave.in with 279,712 collisions).
 
+### ✅ Optimization #2: Maximum Quadtree Depth Tuning
+**File:** [06-maxdepth-tuning.md](06-maxdepth-tuning.md)  
+**Date:** December 2025  
+**Status:** ✅ Implemented and Analyzed  
+**Summary:** Analyzed optimal maxDepth values across different input sizes:
+- Problem: Fixed maxDepth=12 may not be optimal for all input sizes
+- Solution: Added environment variable support (`QUADTREE_MAXDEPTH`) and benchmarked different values
+- Impact: Current default (12) is optimal for large inputs; small/medium inputs could benefit from 10-18
+
+**Key Finding:** Current default maxDepth=12 is optimal for large inputs (koch.in, 3901 lines), which are most performance-critical. Small inputs benefit from maxDepth=10 (18% faster), but overall default is well-chosen.
+
 ---
 
 ## Performance Timeline
