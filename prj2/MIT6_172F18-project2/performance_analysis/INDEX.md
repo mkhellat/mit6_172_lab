@@ -48,6 +48,17 @@ This directory contains documentation of all performance debugging and optimizat
 
 **Result:** **10.3x improvement, 25.7x speedup vs brute-force!** Quadtree now faster in 7/7 cases (100%).
 
+### ✅ Optimization #1: Line Length Caching
+**File:** [05-line-length-caching.md](05-line-length-caching.md)  
+**Date:** December 2025  
+**Status:** ✅ Implemented  
+**Summary:** Precompute and cache line segment length to eliminate expensive sqrt() operations in collision solver:
+- Problem: Line length computed twice per collision using expensive `Vec_length()` (calls `hypot()`)
+- Solution: Add `cachedLength` field to Line struct, compute once per frame in `updatePosition()`
+- Impact: Eliminates thousands of redundant sqrt() calls per frame for high collision density inputs
+
+**Expected Result:** Significant reduction in sqrt() operations, especially for inputs with many collisions (e.g., sin_wave.in with 279,712 collisions).
+
 ---
 
 ## Performance Timeline

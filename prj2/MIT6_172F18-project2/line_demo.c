@@ -30,6 +30,7 @@
 
 #include "./graphic_stuff.h"
 #include "./line.h"
+#include "./vec.h"
 
 static char* LineDemo_input_file_path;
 
@@ -93,6 +94,9 @@ void LineDemo_createLines(LineDemo* lineDemo) {
     // store line ID
     line->id = lineId;
     lineId++;
+
+    // Initialize cached line length (optimization: precompute to avoid expensive sqrt in collision solver)
+    line->cachedLength = Vec_length(Vec_subtract(line->p1, line->p2));
 
     // transfer ownership of line to collisionWorld
     CollisionWorld_addLine(lineDemo->collisionWorld, line);

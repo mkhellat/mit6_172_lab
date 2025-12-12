@@ -124,6 +124,10 @@ void CollisionWorld_updatePosition(CollisionWorld* collisionWorld) {
     Line *line = collisionWorld->lines[i];
     line->p1 = Vec_add(line->p1, Vec_multiply(line->velocity, t));
     line->p2 = Vec_add(line->p2, Vec_multiply(line->velocity, t));
+    // Precompute line length once per frame (used in collision solver).
+    // Since lines are rigid bodies, length is constant, but we recompute
+    // after position updates to ensure correctness.
+    line->cachedLength = Vec_length(Vec_subtract(line->p1, line->p2));
   }
 }
 
@@ -507,8 +511,9 @@ void CollisionWorld_collisionSolver(CollisionWorld* collisionWorld,
   double v2Normal = Vec_dotProduct(l2->velocity, normal);
 
   // Compute the mass of each line (we simply use its length).
-  double m1 = Vec_length(Vec_subtract(l1->p1, l1->p2));
-  double m2 = Vec_length(Vec_subtract(l2->p1, l2->p2));
+  // Use cached length to avoid expensive sqrt operations.
+  double m1 = l1->cachedLength;
+  double m2 = l2->cachedLength;
 
   // Perform the collision calculation (computes the new velocities along
   // the direction normal to the collision face such that momentum and

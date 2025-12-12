@@ -60,6 +60,12 @@ struct Line {
   Color color;  // The line's color.
 
   unsigned int id;  // Unique line ID.
+
+  // Cached line segment length (distance between p1 and p2).
+  // This is precomputed to avoid expensive sqrt operations during collision solving.
+  // Since lines are rigid bodies, length is constant, but we recompute it
+  // after position updates to ensure correctness.
+  double cachedLength;
 };
 typedef struct Line Line;
 
