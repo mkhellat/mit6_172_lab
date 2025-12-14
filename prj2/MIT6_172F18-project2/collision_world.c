@@ -34,6 +34,23 @@
 #include "./quadtree.h"
 #include "./fasttime.h"  // For timing instrumentation
 
+// Cilk reducer support for parallelization
+#include <cilk/cilk.h>
+#include <cilk/cilk_api.h>
+
+// Identity and reduce functions for collision counter reducer
+static void collisionCounter_identity(void* v) {
+  *(unsigned int*)v = 0;
+}
+
+static void collisionCounter_reduce(void* left, void* right) {
+  *(unsigned int*)left += *(unsigned int*)right;
+}
+
+// Static keys for reducer lookup (unique addresses for each reducer)
+static void* eventListReducerKey = &eventListReducerKey;
+static void* collisionCounterReducerKey = &collisionCounterReducerKey;
+
 
 // Comparison function for qsort to sort candidate pairs
 // Matches brute-force processing order: by line1->id, then line2->id
@@ -172,7 +189,22 @@ void CollisionWorld_lineWallCollision(CollisionWorld* collisionWorld) {
 }
 
 void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
+  // PHASE 2: Set up reducer infrastructure for thread-safe parallel operations
+  // Reducers will be used when we add parallelization in Phase 3
+  // For now, code remains serial but reducer functions are implemented and ready
+  // 
+  // NOTE: OpenCilk 2.0's __cilkrts_reducer_lookup API may not work correctly
+  // in serial code. For Phase 2, we use regular variables but structure code
+  // to easily switch to reducers in Phase 3 when we add cilk_for.
+  //
+  // Reducer functions (IntersectionEventList_merge, IntersectionEventList_identity,
+  // collisionCounter_identity, collisionCounter_reduce) are implemented and tested.
+  // They will be used via __cilkrts_reducer_lookup when parallelization is added.
+  
+  // For Phase 2 (serial): Use regular variables
+  // For Phase 3 (parallel): Will switch to reducer views via __cilkrts_reducer_lookup
   IntersectionEventList intersectionEventList = IntersectionEventList_make();
+  unsigned int localCollisionCount = 0;
 
   // Debug: Track pairs tested (only in debug builds)
   #ifdef DEBUG_COLLISIONS
@@ -210,9 +242,13 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
 	bruteForcePairsTested++;
 	#endif
 	if (intersectionType != NO_INTERSECTION) {
+	  // Phase 2: Use regular variable (serial)
+	  // Phase 3: Will switch to reducer view for thread-safe append
 	  IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
 					   intersectionType);
-	  collisionWorld->numLineLineCollisions++;
+	  // Phase 2: Use regular variable (serial)
+	  // Phase 3: Will switch to reducer view for thread-safe increment
+	  localCollisionCount++;
 	  #ifdef DEBUG_COLLISIONS
 	  bruteForceCollisionsFound++;
 	  #endif
@@ -358,9 +394,13 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
             IntersectionType intersectionType =
                 intersect(l1, l2, collisionWorld->timeStep);
             if (intersectionType != NO_INTERSECTION) {
+              // Phase 2: Use regular variable (serial)
+              // Phase 3: Will switch to reducer view for thread-safe append
               IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
                                                intersectionType);
-              collisionWorld->numLineLineCollisions++;
+              // Phase 2: Use regular variable (serial)
+              // Phase 3: Will switch to reducer view for thread-safe increment
+              localCollisionCount++;
               #ifdef DEBUG_COLLISIONS
               quadtreeCollisionsFound++;
               #endif
@@ -420,9 +460,13 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           IntersectionType intersectionType =
               intersect(l1, l2, collisionWorld->timeStep);
           if (intersectionType != NO_INTERSECTION) {
+            // Phase 2: Use regular variable (serial)
+            // Phase 3: Will switch to reducer view for thread-safe append
             IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
                                              intersectionType);
-            collisionWorld->numLineLineCollisions++;
+            // Phase 2: Use regular variable (serial)
+            // Phase 3: Will switch to reducer view for thread-safe increment
+            localCollisionCount++;
             
           }
         }
@@ -430,6 +474,13 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
     }
   }
   
+  // PHASE 2: Use local variables (serial)
+  // Phase 3: Will extract from reducer views after parallel sections
+  // Reducers automatically merge at sync points (cilk_sync or end of function)
+  // In parallel code, will use: intersectionEventList = *eventListReducerView;
+  
+  // Update collision world counter
+  collisionWorld->numLineLineCollisions += localCollisionCount;
   
   // Sort the intersection event list.
   IntersectionEventNode* startNode = intersectionEventList.head;

@@ -26,6 +26,9 @@
 #include "./line.h"
 #include "./intersection_detection.h"
 
+// Cilk reducer support for parallelization
+#include <cilk/cilk.h>
+
 struct IntersectionEventNode {
   // This IntersectionEventNode does not own these Line* lines.
   Line* l1;
@@ -64,5 +67,25 @@ void IntersectionEventList_appendNode(
 // Deletes all the nodes in the list.
 void IntersectionEventList_deleteNodes(
     IntersectionEventList* intersectionEventList);
+
+// Reducer support functions for thread-safe parallel list operations
+// These functions enable IntersectionEventList to be used with Cilk reducers
+// for parallel collision detection without race conditions.
+
+// Merge two lists (for Cilk reducer)
+// Merges list2 into list1, then clears list2
+// Used by Cilk reducer to combine results from parallel strands
+void IntersectionEventList_merge(void* reducer, void* other);
+
+// Initialize empty list (for Cilk reducer identity element)
+// Sets list to empty state (head = tail = NULL)
+// Used by Cilk reducer to create identity element
+void IntersectionEventList_identity(void* reducer);
+
+// Reducer type declaration for IntersectionEventList
+// Enables thread-safe list operations in parallel code
+// OpenCilk 2.0 uses _Hyperobject compiler intrinsic
+// The reducer is created using _Hyperobject with identity and reduce functions
+// Usage: IntersectionEventList eventList _Hyperobject(IntersectionEventList_identity, IntersectionEventList_merge);
 
 #endif  // INTERSECTIONEVENTLIST_H_

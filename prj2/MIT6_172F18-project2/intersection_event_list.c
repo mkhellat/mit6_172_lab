@@ -102,3 +102,31 @@ void IntersectionEventList_deleteNodes(
   intersectionEventList->head = NULL;
   intersectionEventList->tail = NULL;
 }
+
+// Reducer support functions for parallelization
+
+void IntersectionEventList_merge(void* reducer, void* other) {
+  IntersectionEventList* list1 = (IntersectionEventList*)reducer;
+  IntersectionEventList* list2 = (IntersectionEventList*)other;
+  
+  // If list1 is empty, just copy list2
+  if (list1->head == NULL) {
+    *list1 = *list2;
+  } else if (list2->head != NULL) {
+    // Both lists non-empty: append list2 to list1
+    list1->tail->next = list2->head;
+    list1->tail = list2->tail;
+  }
+  // If list2 is empty, nothing to do
+  
+  // Clear list2 (it's been merged into list1)
+  // This is safe because list2 is a local copy in the reducer
+  list2->head = NULL;
+  list2->tail = NULL;
+}
+
+void IntersectionEventList_identity(void* reducer) {
+  IntersectionEventList* list = (IntersectionEventList*)reducer;
+  list->head = NULL;
+  list->tail = NULL;
+}
