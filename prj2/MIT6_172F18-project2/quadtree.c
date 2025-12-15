@@ -1018,14 +1018,15 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   // This ensures we never add the same pair twice, regardless of processing order
   // Matrix is upper triangular (only pairs where id1 < id2 are stored)
   // Access pattern: seenPairs[minId][maxId] for pair (minId, maxId)
-  bool** seenPairs = calloc(maxLineId + 1, sizeof(bool*));
+  // PHASE 8: Use _Atomic bool for proper atomic operations
+  _Atomic bool** seenPairs = calloc(maxLineId + 1, sizeof(_Atomic bool*));
   if (seenPairs == NULL) {
     free(lineIdToIndex);  // Fix memory leak: free lineIdToIndex before returning
     free(overlappingCells);
     return QUADTREE_ERROR_MALLOC_FAILED;
   }
   for (unsigned int i = 0; i <= maxLineId; i++) {
-    seenPairs[i] = calloc(maxLineId + 1, sizeof(bool));
+    seenPairs[i] = calloc(maxLineId + 1, sizeof(_Atomic bool));
     if (seenPairs[i] == NULL) {
       // Clean up already allocated rows
       for (unsigned int j = 0; j < i; j++) {
@@ -1075,6 +1076,20 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     totalCellsChecked = 0;
   unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
     totalPairsFound = 0;
+  
+  // PHASE 8: Debug counters for detailed debugging
+  #ifdef DEBUG_PHASE8
+  unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
+    debugPairsSkippedCapacity = 0;
+  unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
+    debugPairsSkippedAlreadySeen = 0;
+  unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
+    debugPairsSkippedOrder = 0;
+  unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
+    debugPairsSkippedBounds = 0;
+  unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
+    debugPairsAdded = 0;
+  #endif
   
   // PHASE 8: Error flag for parallel error handling (can't return from cilk_for)
   QuadTreeError cilk_reducer(queryError_identity, queryError_reduce) queryError = QUADTREE_SUCCESS;
@@ -1145,38 +1160,31 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           continue;
         }
         
+        #ifdef DEBUG_PHASE8
+        // Track all potential pairs for debugging
+        #endif
         
-        // PHASE 8: Restore order-dependent check for correctness
-        // The serial version only adds pairs where line2's array index > line1's array index
-        // This ensures we don't add duplicate pairs. In parallel, we need to maintain
-        // this logic but make it thread-safe. We use lineIdToIndex to check array order.
+        // PHASE 8: Removed order-dependent check - rely on seenPairs for duplicate prevention
+        // The order check (line2ArrayIndex <= i) was causing correctness issues in parallel
+        // because parallel execution processes lines in parallel, not sequentially.
+        // The seenPairs matrix already prevents duplicates, so the order check is redundant.
+        // We still need to ensure line1->id < line2->id for consistent pair representation.
         
-        // CRITICAL: Ensure line2 appears later in tree->lines than line1
-        // This matches brute-force's iteration order (i < j) and prevents duplicates
-        // PERFORMANCE FIX: Use O(1) hash lookup instead of O(n) linear search
-        if (line2->id > maxLineId) {
-          // line2->id is out of bounds for lineIdToIndex array - skip it
-          continue;
-        }
-        unsigned int line2ArrayIndex = lineIdToIndex[line2->id];
-        if (line2ArrayIndex >= tree->numLines) {
-          // line2 is not in tree->lines - this shouldn't happen, but skip it
-          continue;
-        }
-        // PHASE 8: Thread-safe order check - use atomic load for i to ensure we see
-        // a consistent value (though i is loop variable, this is defensive)
-        // Actually, i is the loop variable, so it's already consistent per iteration
-        // But we need to ensure we're comparing with the correct i value
-        // In cilk_for, each iteration has its own i, so this should be fine
-        if (line2ArrayIndex <= i) {
-          // line2 appears before/at line1's position in the array
-          // Brute-force would test this as (line2, line1) when j < i, not (line1, line2)
-          // So we should skip it here to avoid double-testing
-          continue;
-        }
-        
-        // Now ensure line1->id < line2->id (matches brute-force after swap)
+        // Ensure line1->id < line2->id (normalize pair representation)
+        // This ensures we always represent pairs as (minId, maxId) regardless of order
         if (line1->id >= line2->id) {
+          #ifdef DEBUG_PHASE8
+          debugPairsSkippedOrder++;
+          #endif
+          continue;
+        }
+        
+        // Bounds check for seenPairs matrix
+        if (line2->id > maxLineId) {
+          // line2->id is out of bounds for seenPairs matrix - skip it
+          #ifdef DEBUG_PHASE8
+          debugPairsSkippedBounds++;
+          #endif
           continue;
         }
         
@@ -1201,6 +1209,9 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           // Capacity exceeded - skip this pair without marking as seen
           // This allows another thread or retry to add it if capacity grows
           // But with pre-allocation, this should never happen
+          #ifdef DEBUG_PHASE8
+          debugPairsSkippedCapacity++;
+          #endif
           continue;
         }
         
@@ -1208,12 +1219,17 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         // Use atomic test-and-set style operation to atomically check and set
         // Try to atomically set the value from false to true
         // Returns the old value: false if we successfully set it (wasn't seen), true if already seen
-        bool* seenPtr = &seenPairs[minId][maxId];
-        bool oldValue = __atomic_exchange_n(seenPtr, true, __ATOMIC_ACQ_REL);
+        // PHASE 8: Use _Atomic bool for proper atomic operations
+        _Atomic bool* seenPtr = &seenPairs[minId][maxId];
+        // Use atomic_exchange_explicit (C11 standard) for proper atomic operations
+        bool oldValue = atomic_exchange_explicit(seenPtr, true, memory_order_acq_rel);
         
         if (oldValue) {
           // Pair was already seen by another thread - skip it
           // This is correct behavior - we only want to add each pair once
+          #ifdef DEBUG_PHASE8
+          debugPairsSkippedAlreadySeen++;
+          #endif
           #ifdef DEBUG_QUADTREE
           fprintf(stderr, "WARNING: Duplicate pair detected! (%u, %u) - line1 id=%u, line2 id=%u, cellIdx=%d\n", 
                   minId, maxId, line1->id, line2->id, cellIdx);
@@ -1245,6 +1261,13 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         candidateList->pairs[myIndex].line1 = line1;
         candidateList->pairs[myIndex].line2 = line2;
         totalPairsFound++;
+        #ifdef DEBUG_PHASE8
+        debugPairsAdded++;
+        // Log each pair being added for detailed comparison
+        // Note: line2ArrayIndex is in scope here (declared earlier in the loop)
+        fprintf(stderr, "DEBUG_PAIR_ADDED: %u,%u (line1_idx=%u, line2_idx=%u, myIndex=%u)\n",
+                line1->id, line2->id, i, lineIdToIndex[line2->id], myIndex);
+        #endif
       }
     }
   }
@@ -1263,6 +1286,19 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   
   // Update statistics
   updateStatsOnQuery(tree, totalCellsChecked, totalPairsFound);
+  
+  #ifdef DEBUG_PHASE8
+  // PHASE 8: Debug output for correctness investigation
+  fprintf(stderr, "===== PHASE 8 DEBUG STATISTICS =====\n");
+  fprintf(stderr, "Total pairs added: %u\n", debugPairsAdded);
+  fprintf(stderr, "Pairs skipped - capacity: %u\n", debugPairsSkippedCapacity);
+  fprintf(stderr, "Pairs skipped - already seen: %u\n", debugPairsSkippedAlreadySeen);
+  fprintf(stderr, "Pairs skipped - order check: %u\n", debugPairsSkippedOrder);
+  fprintf(stderr, "Pairs skipped - bounds: %u\n", debugPairsSkippedBounds);
+  fprintf(stderr, "Final candidate list count: %u\n", candidateList->count);
+  fprintf(stderr, "Candidate list capacity: %u\n", candidateList->capacity);
+  fprintf(stderr, "====================================\n");
+  #endif
   
   // STEP 1: Instrument candidate pair generation statistics
   #ifdef DEBUG_QUADTREE_STATS
