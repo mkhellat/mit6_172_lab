@@ -36,7 +36,6 @@
 
 // Cilk reducer support for parallelization
 #include <cilk/cilk.h>
-#include <cilk/cilk_api.h>
 
 // Identity and reduce functions for collision counter reducer
 static void collisionCounter_identity(void* v) {
@@ -47,10 +46,8 @@ static void collisionCounter_reduce(void* left, void* right) {
   *(unsigned int*)left += *(unsigned int*)right;
 }
 
-// Static keys for reducer lookup (unique addresses for each reducer)
-// Using char instead of void* as some OpenCilk versions expect this
-static char eventListReducerKey;
-static char collisionCounterReducerKey;
+// Note: Reducers are now declared using cilk_reducer keyword (OpenCilk 2.0 syntax)
+// No need for static keys - the compiler handles reducer management automatically
 
 
 // Comparison function for qsort to sort candidate pairs
@@ -191,10 +188,11 @@ void CollisionWorld_lineWallCollision(CollisionWorld* collisionWorld) {
 
 void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
   // PHASE 3: Parallelize candidate testing using Cilk reducers
-  // TEMPORARY: Use regular variables to test cilk_for first
-  // Will switch to reducers once cilk_for is verified working
-  IntersectionEventList intersectionEventList = IntersectionEventList_make();
-  unsigned int localCollisionCount = 0;
+  // Using cilk_reducer keyword (OpenCilk 2.0 syntax) for thread-safe parallel operations
+  IntersectionEventList cilk_reducer(IntersectionEventList_identity, IntersectionEventList_merge) 
+    intersectionEventList = IntersectionEventList_make();
+  unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
+    localCollisionCount = 0;
 
   // Debug: Track pairs tested (only in debug builds)
   #ifdef DEBUG_COLLISIONS
@@ -232,7 +230,7 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
 	bruteForcePairsTested++;
 	#endif
 	if (intersectionType != NO_INTERSECTION) {
-	  // PHASE 3: TEMPORARY - using regular variables
+	  // PHASE 3: Using cilk_reducer - thread-safe parallel operations
 	  IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
 					   intersectionType);
 	  localCollisionCount++;
@@ -367,10 +365,7 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           // No need for additional duplicate checking here
           // PHASE 3: Parallelize candidate testing using cilk_for
           // Each iteration is independent - perfect for parallelization
-          // 
-          // NOTE: Reducer API causes crashes - using regular variables for now
-          // This has race conditions but allows the code to run
-          // TODO: Investigate reducer API issue further
+          // Using cilk_reducer for thread-safe parallel operations
           cilk_for (unsigned int i = 0; i < candidateList.count; i++) {
             Line* l1 = candidateList.pairs[i].line1;
             Line* l2 = candidateList.pairs[i].line2;
@@ -387,8 +382,7 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
             IntersectionType intersectionType =
                 intersect(l1, l2, collisionWorld->timeStep);
             if (intersectionType != NO_INTERSECTION) {
-              // PHASE 3: Using regular variables (has race conditions)
-              // Reducer API causes segmentation faults - needs further investigation
+              // PHASE 3: Using cilk_reducer - thread-safe parallel operations
               IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
                                                intersectionType);
               localCollisionCount++;
@@ -451,7 +445,7 @@ void CollisionWorld_detectIntersection(CollisionWorld* collisionWorld) {
           IntersectionType intersectionType =
               intersect(l1, l2, collisionWorld->timeStep);
           if (intersectionType != NO_INTERSECTION) {
-            // PHASE 3: TEMPORARY - using regular variables
+            // PHASE 3: Using cilk_reducer - thread-safe parallel operations
             IntersectionEventList_appendNode(&intersectionEventList, l1, l2,
                                              intersectionType);
             localCollisionCount++;
