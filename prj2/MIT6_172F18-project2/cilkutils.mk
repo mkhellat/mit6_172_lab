@@ -4,7 +4,8 @@ LDFLAGS += -fsanitize=cilk
 endif
 
 ifeq ($(CILKSCALE),1)
-CXXFLAGS += -mllvm -instrument-cilk -DCILKSCALE
-LDFLAGS += -lcilkscale
+# Use -fcilktool=cilkscale for OpenCilk 2.0 Cilkscale instrumentation
+CXXFLAGS += -fcilktool=cilkscale -DCILKSCALE
+# Cilkscale runtime is automatically linked when using -fcilktool=cilkscale
 endif
 
