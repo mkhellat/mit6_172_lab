@@ -1079,6 +1079,10 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   
   // PHASE 8: Debug counters for detailed debugging
   #ifdef DEBUG_PHASE8
+  // Track frame number for per-frame comparison (shared across all threads)
+  static unsigned int debugFrameNumber = 0;
+  debugFrameNumber++;
+  
   unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
     debugPairsSkippedCapacity = 0;
   unsigned int cilk_reducer(collisionCounter_identity, collisionCounter_reduce) 
@@ -1269,8 +1273,10 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         debugPairsAdded++;
         // Log each pair being added for detailed comparison
         // Note: line2ArrayIndex is in scope here (declared earlier in the loop)
-        fprintf(stderr, "DEBUG_PAIR_ADDED: %u,%u (line1_idx=%u, line2_idx=%u, myIndex=%u)\n",
-                line1->id, line2->id, i, lineIdToIndex[line2->id], myIndex);
+        // Frame number is tracked at function start (debugFrameNumber)
+        // Note: debugFrameNumber is in outer scope, accessible here
+        fprintf(stderr, "DEBUG_PAIR_ADDED: FRAME=%u PAIR=%u,%u line1_idx=%u line2_idx=%u myIndex=%u\n",
+                debugFrameNumber, line1->id, line2->id, i, lineIdToIndex[line2->id], myIndex);
         #endif
       }
     }
@@ -1293,7 +1299,8 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   
   #ifdef DEBUG_PHASE8
   // PHASE 8: Debug output for correctness investigation
-  fprintf(stderr, "===== PHASE 8 DEBUG STATISTICS =====\n");
+  // Frame number is already tracked at function start (debugFrameNumber)
+  fprintf(stderr, "===== PHASE 8 DEBUG STATISTICS (Frame %u) =====\n", debugFrameNumber);
   fprintf(stderr, "Total pairs added: %u\n", debugPairsAdded);
   fprintf(stderr, "Pairs skipped - capacity: %u\n", debugPairsSkippedCapacity);
   fprintf(stderr, "Pairs skipped - already seen: %u\n", debugPairsSkippedAlreadySeen);
