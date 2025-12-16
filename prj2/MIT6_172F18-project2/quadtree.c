@@ -920,14 +920,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     return QUADTREE_SUCCESS;
   }
   
-  // Allocate temporary storage for overlapping cells per line
-  // Worst case: line spans all cells at max depth
-  unsigned int maxCellsPerLine = (1u << tree->config.maxDepth);
-  QuadNode** overlappingCells = malloc(maxCellsPerLine * sizeof(QuadNode*));
-  if (overlappingCells == NULL) {
-    return QUADTREE_ERROR_MALLOC_FAILED;
-  }
-  
   // Find max line ID to allocate pair tracking matrix
   unsigned int maxLineId = 0;
   for (unsigned int i = 0; i < tree->numLines; i++) {
@@ -1001,7 +993,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   // We'll use line->id as the key since IDs are unique
   unsigned int* lineIdToIndex = calloc(maxLineId + 1, sizeof(unsigned int));
   if (lineIdToIndex == NULL) {
-    free(overlappingCells);
     return QUADTREE_ERROR_MALLOC_FAILED;
   }
   // Initialize to invalid index (0 is valid, so use numLines+1 as sentinel)
@@ -1023,7 +1014,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   _Atomic bool** seenPairs = calloc(maxLineId + 1, sizeof(_Atomic bool*));
   if (seenPairs == NULL) {
     free(lineIdToIndex);  // Fix memory leak: free lineIdToIndex before returning
-    free(overlappingCells);
     return QUADTREE_ERROR_MALLOC_FAILED;
   }
   for (unsigned int i = 0; i <= maxLineId; i++) {
@@ -1035,7 +1025,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
       }
       free(seenPairs);
       free(lineIdToIndex);  // Fix memory leak: free lineIdToIndex before returning
-      free(overlappingCells);
       return QUADTREE_ERROR_MALLOC_FAILED;
     }
   }
@@ -1065,7 +1054,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
       }
       free(seenPairs);
       free(lineIdToIndex);
-      free(overlappingCells);
       return QUADTREE_ERROR_MALLOC_FAILED;
     }
     candidateList->pairs = newPairs;
@@ -1116,6 +1104,18 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     
     // No need to reset - we use a global matrix that persists across iterations
     
+    // CRITICAL FIX: Allocate overlappingCells per worker to avoid race condition
+    // Previously, overlappingCells was allocated once and shared by all workers,
+    // causing non-deterministic results when multiple workers wrote to the same array.
+    // Each worker now gets its own array, ensuring thread-safety.
+    unsigned int maxCellsPerLine = (1u << tree->config.maxDepth);
+    QuadNode** overlappingCells = malloc(maxCellsPerLine * sizeof(QuadNode*));
+    if (overlappingCells == NULL) {
+      // Can't return from cilk_for - set error flag instead
+      queryError = QUADTREE_ERROR_MALLOC_FAILED;
+      continue;  // No need to free - allocation failed
+    }
+    
     // Compute line's bounding box
     // CRITICAL: Use buildTimeStep to match the timeStep used during build phase
     // This ensures bounding boxes are computed consistently between build and query
@@ -1124,6 +1124,17 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     computeLineBoundingBox(line1, tree->buildTimeStep,
                            &lineXmin, &lineXmax, &lineYmin, &lineYmax,
                            tree->maxVelocity, tree->config.minCellSize);
+    
+    #ifdef DEBUG_PHASE8
+    // Detailed tracing for line1_idx=8 to understand spatial query
+    bool traceLine8 = (i == 8);
+    if (traceLine8) {
+      unsigned int workerId = __cilkrts_get_worker_number();
+      fprintf(stderr, "TRACE_SPATIAL_START: line1_idx=8 line1_id=%u worker=%u\n", line1->id, workerId);
+      fprintf(stderr, "TRACE_SPATIAL_BBOX: line1_idx=8 bbox=[%.10f,%.10f]x[%.10f,%.10f] worker=%u\n",
+              lineXmin, lineXmax, lineYmin, lineYmax, workerId);
+    }
+    #endif
     
     // Find all cells this line overlaps
     int numCells = findOverlappingCellsRecursive(tree->root,
@@ -1134,15 +1145,16 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     if (numCells < 0) {
       // PHASE 8: Can't return from cilk_for - set error flag instead
       queryError = QUADTREE_ERROR_MALLOC_FAILED;
+      free(overlappingCells);  // Free before continue
       continue;  // Skip this line and continue with others
     }
     
     #ifdef DEBUG_PHASE8
-    // Trace spatial query for line1_idx=8 to understand why it finds/doesn't find line 133
-    if (i == 8) {
+    // Trace spatial query results for line1_idx=8
+    if (traceLine8) {
       unsigned int workerId = __cilkrts_get_worker_number();
-      fprintf(stderr, "TRACE_SPATIAL: line1_idx=8 line1_id=%u found %d overlapping cells (worker=%u)\n",
-              line1->id, numCells, workerId);
+      fprintf(stderr, "TRACE_SPATIAL_RESULT: line1_idx=8 found %d overlapping cells (worker=%u)\n",
+              numCells, workerId);
     }
     #endif
     
@@ -1168,10 +1180,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
       
       #ifdef DEBUG_PHASE8
       // Trace cells for line1_idx=8
-      if (i == 8) {
+      bool traceLine8 = (i == 8);
+      if (traceLine8) {
         unsigned int workerId = __cilkrts_get_worker_number();
-        fprintf(stderr, "TRACE_SPATIAL: line1_idx=8 cell[%d] has %u lines (worker=%u)\n",
-                cellIdx, cell->numLines, workerId);
+        fprintf(stderr, "TRACE_SPATIAL_CELL: line1_idx=8 cell[%d] bounds=[%.10f,%.10f]x[%.10f,%.10f] has %u lines (worker=%u)\n",
+                cellIdx, cell->xmin, cell->xmax, cell->ymin, cell->ymax, cell->numLines, workerId);
       }
       #endif
       
@@ -1185,9 +1198,9 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         
         #ifdef DEBUG_PHASE8
         // Trace all lines found in cells for line1_idx=8
-        if (i == 8) {
+        if (traceLine8) {
           unsigned int workerId = __cilkrts_get_worker_number();
-          fprintf(stderr, "TRACE_SPATIAL: line1_idx=8 found line2_id=%u in cell[%d] (worker=%u)\n",
+          fprintf(stderr, "TRACE_SPATIAL_LINE: line1_idx=8 found line2_id=%u in cell[%d] (worker=%u)\n",
                   line2->id, cellIdx, workerId);
         }
         
@@ -1197,8 +1210,9 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         if ((line1->id == 8 && line2->id == 133) || (line1->id == 133 && line2->id == 8)) {
           traceThisPair = true;
           unsigned int workerId = __cilkrts_get_worker_number();
-          fprintf(stderr, "TRACE_PAIR: FOUND in spatial query! line1_idx=%u line1_id=%u line2_id=%u worker=%u cellIdx=%d\n", 
-                  i, line1->id, line2->id, workerId, cellIdx);
+          fprintf(stderr, "TRACE_PAIR_FOUND: line1_idx=%u line1_id=%u line2_id=%u worker=%u cellIdx=%d cellBounds=[%.10f,%.10f]x[%.10f,%.10f]\n", 
+                  i, line1->id, line2->id, workerId, cellIdx, 
+                  cell->xmin, cell->xmax, cell->ymin, cell->ymax);
         }
         #endif
         
@@ -1345,6 +1359,9 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         #endif
       }
     }
+    
+    // Free per-worker overlappingCells array
+    free(overlappingCells);
   }
   
   // PHASE 8: Check for errors from parallel execution
@@ -1355,7 +1372,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     }
     free(seenPairs);
     free(lineIdToIndex);
-    free(overlappingCells);
     return queryError;
   }
   
@@ -1451,7 +1467,6 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
   }
   free(seenPairs);
   free(lineIdToIndex);  // Free the reverse lookup table
-  free(overlappingCells);
   
   #ifdef DEBUG_QUADTREE_TIMING
   // Report query timing
