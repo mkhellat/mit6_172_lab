@@ -1199,15 +1199,15 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         }
         
         // PHASE 8: Use atomic operations for thread-safe seenPairs check and set
-        // CRITICAL FIX: Check capacity BEFORE marking as seen to avoid losing pairs
+        // CRITICAL: Check capacity BEFORE marking as seen to avoid losing pairs
         // If capacity is exceeded, we skip without marking, so the pair can be
-        // added by another thread or in a retry (though with pre-allocation this shouldn't happen)
+        // added by another thread (though with pre-allocation this shouldn't happen)
         
         // First, check if we have capacity (optimistic check - might change, but unlikely)
         unsigned int currentCount = __atomic_load_n(&candidateList->count, __ATOMIC_ACQUIRE);
         if (currentCount >= candidateList->capacity) {
           // Capacity exceeded - skip this pair without marking as seen
-          // This allows another thread or retry to add it if capacity grows
+          // This allows another thread to add it if capacity grows
           // But with pre-allocation, this should never happen
           #ifdef DEBUG_PHASE8
           debugPairsSkippedCapacity++;
@@ -1238,22 +1238,26 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         }
         
         // Successfully marked as seen (old value was false, now it's true)
-        
-        // Successfully marked as seen (atomic operation succeeded)
         // Now we can safely add it to the candidate list
         
         // PHASE 8: Thread-safe append to candidateList
-        // Get index atomically (capacity already checked above)
+        // Get index atomically (capacity already checked above, but might have changed)
+        // atomic_fetch_add returns the OLD value before incrementing, so we get a valid index
         unsigned int myIndex = __atomic_fetch_add(&candidateList->count, 1, __ATOMIC_ACQ_REL);
         
         // Double-check bounds (should not happen with pre-allocation, but be safe)
         if (myIndex >= candidateList->capacity) {
           // This should never happen with proper pre-allocation
           // But if it does, we've already marked as seen, so we need to handle it
-          // Decrement count and unmark (but atomic unmark is complex, so just skip)
+          // Decrement count to undo the increment
           __atomic_fetch_sub(&candidateList->count, 1, __ATOMIC_ACQ_REL);
           // Note: Pair is marked as seen but not added - this is a bug if it happens
           // But with proper pre-allocation, this should never occur
+          #ifdef DEBUG_PHASE8
+          debugPairsSkippedCapacity++;
+          fprintf(stderr, "WARNING: Capacity exceeded after atomic fetch_add! Pair (%u, %u) lost!\n",
+                  minId, maxId);
+          #endif
           continue;
         }
         
