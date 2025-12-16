@@ -39,6 +39,7 @@
 
 // Cilk support for parallelization
 #include <cilk/cilk.h>
+#include <cilk/cilk_api.h>  // For __cilkrts_get_worker_number()
 #include <stdatomic.h>  // For atomic operations on seenPairs
 
 // Reducer functions for statistics (same as in collision_world.c)
@@ -1136,6 +1137,15 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
       continue;  // Skip this line and continue with others
     }
     
+    #ifdef DEBUG_PHASE8
+    // Trace spatial query for line1_idx=8 to understand why it finds/doesn't find line 133
+    if (i == 8) {
+      unsigned int workerId = __cilkrts_get_worker_number();
+      fprintf(stderr, "TRACE_SPATIAL: line1_idx=8 line1_id=%u found %d overlapping cells (worker=%u)\n",
+              line1->id, numCells, workerId);
+    }
+    #endif
+    
     totalCellsChecked += (unsigned int)numCells;
     
     
@@ -1156,6 +1166,15 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
     for (int cellIdx = 0; cellIdx < numCells; cellIdx++) {
       QuadNode* cell = overlappingCells[cellIdx];
       
+      #ifdef DEBUG_PHASE8
+      // Trace cells for line1_idx=8
+      if (i == 8) {
+        unsigned int workerId = __cilkrts_get_worker_number();
+        fprintf(stderr, "TRACE_SPATIAL: line1_idx=8 cell[%d] has %u lines (worker=%u)\n",
+                cellIdx, cell->numLines, workerId);
+      }
+      #endif
+      
       for (unsigned int j = 0; j < cell->numLines; j++) {
         Line* line2 = cell->lines[j];
         
@@ -1165,7 +1184,22 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         }
         
         #ifdef DEBUG_PHASE8
+        // Trace all lines found in cells for line1_idx=8
+        if (i == 8) {
+          unsigned int workerId = __cilkrts_get_worker_number();
+          fprintf(stderr, "TRACE_SPATIAL: line1_idx=8 found line2_id=%u in cell[%d] (worker=%u)\n",
+                  line2->id, cellIdx, workerId);
+        }
+        
         // Track all potential pairs for debugging
+        // Check if this is a pair we're interested in tracing
+        bool traceThisPair = false;
+        if ((line1->id == 8 && line2->id == 133) || (line1->id == 133 && line2->id == 8)) {
+          traceThisPair = true;
+          unsigned int workerId = __cilkrts_get_worker_number();
+          fprintf(stderr, "TRACE_PAIR: FOUND in spatial query! line1_idx=%u line1_id=%u line2_id=%u worker=%u cellIdx=%d\n", 
+                  i, line1->id, line2->id, workerId, cellIdx);
+        }
         #endif
         
         // PHASE 8: Removed order-dependent check - rely on seenPairs for duplicate prevention
@@ -1179,6 +1213,10 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         if (line1->id >= line2->id) {
           #ifdef DEBUG_PHASE8
           debugPairsSkippedOrder++;
+          if (traceThisPair) {
+            fprintf(stderr, "TRACE_PAIR: Skipped due to order check (line1_id=%u >= line2_id=%u)\n",
+                    line1->id, line2->id);
+          }
           #endif
           continue;
         }
@@ -1188,6 +1226,10 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           // line2->id is out of bounds for seenPairs matrix - skip it
           #ifdef DEBUG_PHASE8
           debugPairsSkippedBounds++;
+          if (traceThisPair) {
+            fprintf(stderr, "TRACE_PAIR: Skipped due to bounds check (line2_id=%u > maxLineId=%u)\n",
+                    line2->id, maxLineId);
+          }
           #endif
           continue;
         }
@@ -1199,6 +1241,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         unsigned int maxId = line2->id;
         if (maxId > maxLineId) {
           // This shouldn't happen, but handle gracefully
+          #ifdef DEBUG_PHASE8
+          if (traceThisPair) {
+            fprintf(stderr, "TRACE_PAIR: Skipped due to maxId > maxLineId\n");
+          }
+          #endif
           continue;
         }
         
@@ -1215,6 +1262,10 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           // But with pre-allocation, this should never happen
           #ifdef DEBUG_PHASE8
           debugPairsSkippedCapacity++;
+          if (traceThisPair) {
+            fprintf(stderr, "TRACE_PAIR: Skipped due to capacity (currentCount=%u >= capacity=%u)\n",
+                    currentCount, candidateList->capacity);
+          }
           #endif
           continue;
         }
@@ -1233,6 +1284,11 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           // This is correct behavior - we only want to add each pair once
           #ifdef DEBUG_PHASE8
           debugPairsSkippedAlreadySeen++;
+          if (traceThisPair) {
+            unsigned int workerId = __cilkrts_get_worker_number();
+            fprintf(stderr, "TRACE_PAIR: Skipped - already seen by another thread (worker=%u, oldValue=true)\n",
+                    workerId);
+          }
           #endif
           #ifdef DEBUG_QUADTREE
           fprintf(stderr, "WARNING: Duplicate pair detected! (%u, %u) - line1 id=%u, line2 id=%u, cellIdx=%d\n", 
@@ -1240,6 +1296,13 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
           #endif
           continue;  // Already added this pair
         }
+        
+        #ifdef DEBUG_PHASE8
+        if (traceThisPair) {
+          unsigned int workerId = __cilkrts_get_worker_number();
+          fprintf(stderr, "TRACE_PAIR: Successfully marked as seen (worker=%u, oldValue=false)\n", workerId);
+        }
+        #endif
         
         // Successfully marked as seen (old value was false, now it's true)
         // Now we can safely add it to the candidate list
@@ -1275,8 +1338,10 @@ QuadTreeError QuadTree_findCandidatePairs(QuadTree* tree,
         // Note: line2ArrayIndex is in scope here (declared earlier in the loop)
         // Frame number is tracked at function start (debugFrameNumber)
         // Note: debugFrameNumber is in outer scope, accessible here
-        fprintf(stderr, "DEBUG_PAIR_ADDED: FRAME=%u PAIR=%u,%u line1_idx=%u line2_idx=%u myIndex=%u\n",
-                debugFrameNumber, line1->id, line2->id, i, lineIdToIndex[line2->id], myIndex);
+        // Get worker ID for parallel debugging
+        unsigned int workerId = __cilkrts_get_worker_number();
+        fprintf(stderr, "DEBUG_PAIR_ADDED: FRAME=%u WORKER=%u PAIR=%u,%u line1_idx=%u line2_idx=%u myIndex=%u\n",
+                debugFrameNumber, workerId, line1->id, line2->id, i, lineIdToIndex[line2->id], myIndex);
         #endif
       }
     }
