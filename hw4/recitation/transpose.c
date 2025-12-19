@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "omp.h"
+#include <cilk/cilk.h>
 
 typedef struct Matrix {
     uint16_t rows;
@@ -83,32 +83,18 @@ stored at the address a' = Nm+n.
 @param arr Array to be transposed.
 */
 void transpose(Matrix* arr) {
-    uint16_t i, j;
-    // Parallel section:
-#ifdef _OPENMP
-#pragma omp parallel for private(i, j) num_threads(8) schedule(static, 2)
-    for (i = 1; i < arr->rows; i++) {
+    uint16_t j;
+    // Parallel transpose using cilk_for
+    // Parallelize the outer loop - each iteration swaps one row with corresponding column
+    // Note: loop variable must be declared in cilk_for initializer
+    cilk_for (uint16_t i = 1; i < arr->rows; i++) {
+        // Inner loop remains serial - swaps elements in row i with column i
         for (j = 0; j < i; j++) {
             uint8_t tmp = arr->data[i][j];
             arr->data[i][j] = arr->data[j][i];
             arr->data[j][i] = tmp;
         }
     }
-    goto end;
-#endif
-
-    // Serial section:
-    for (i = 1; i < arr->rows; i++) {
-        for (j = 0; j < i; j++) {
-            uint8_t tmp = arr->data[i][j];
-            arr->data[i][j] = arr->data[j][i];
-            arr->data[j][i] = tmp;
-        }
-    }
-    goto end;
-
-end:
-    return;
 }
 
 int main(int argc, char* argv[]) {

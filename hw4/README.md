@@ -94,9 +94,15 @@ make fib                  # Build serial version
   - Threshold 25 provides optimal balance between parallelism and overhead
 - **Results**: See Performance Results section below
 
-#### ⏳ Checkoff Item 3: Matrix Transpose
-- **Status**: Not Started
-- **Description**: Parallelize matrix transpose operation
+#### ✅ Checkoff Item 3: Matrix Transpose
+- **Status**: Completed
+- **Description**: Parallelize matrix transpose using `cilk_for`
+- **Approach**:
+  - Converted from OpenMP `#pragma omp parallel for` to Cilk `cilk_for`
+  - Parallelized outer loop (i = 1 to rows-1)
+  - Inner loop remains serial (j = 0 to i-1) - triangular transpose pattern
+  - Each outer iteration swaps one row with corresponding column independently
+- **Results**: See Performance Results section below
 
 #### ⏳ Homework: Reducer Hyperobjects
 - **Status**: Not Started
@@ -146,6 +152,31 @@ make fib                  # Build serial version
 { time CILK_NWORKERS=8 ./fib 45; }
 ```
 
+### Matrix Transpose (transpose 10000)
+
+| Workers | Real Time | User Time | Sys Time | CPU Usage | Speedup | Status |
+|---------|-----------|-----------|----------|-----------|---------|--------|
+| 1       | 1.122s    | 1.07s     | 0.05s    | 99%       | 1.0x    | ✅     |
+| 4       | 0.921s    | 1.17s     | 0.05s    | 132%      | 1.22x   | ✅     |
+| 8       | 0.903s    | 1.44s     | 0.05s    | 165%      | 1.24x   | ✅     |
+
+**Observations:**
+- **1 worker**: Serial execution, ~1.12 seconds
+- **4 workers**: 1.22x speedup, using ~1.3 cores (132% CPU)
+- **8 workers**: 1.24x speedup, using ~1.6 cores (165% CPU)
+- **Limited speedup**: The triangular transpose pattern has limited parallelism
+  - Each outer iteration has different work (i elements to swap)
+  - Load imbalance: early iterations do less work than later ones
+  - Memory access pattern may cause cache conflicts
+- **Note**: Speedup is modest due to the nature of the algorithm and potential cache effects
+
+**Test Command:**
+```bash
+{ time CILK_NWORKERS=1 ./transpose 10000; }
+{ time CILK_NWORKERS=4 ./transpose 10000; }
+{ time CILK_NWORKERS=8 ./transpose 10000; }
+```
+
 ## Code Structure
 
 ### fib.c
@@ -171,13 +202,35 @@ int64_t fib(int64_t n) {
 }
 ```
 
+### transpose.c
+```c
+#include <cilk/cilk.h>
+
+void transpose(Matrix* arr) {
+    uint16_t j;
+    // Parallel transpose using cilk_for
+    // Parallelize the outer loop - each iteration swaps one row with corresponding column
+    cilk_for (uint16_t i = 1; i < arr->rows; i++) {
+        // Inner loop remains serial - swaps elements in row i with column i
+        for (j = 0; j < i; j++) {
+            uint8_t tmp = arr->data[i][j];
+            arr->data[i][j] = arr->data[j][i];
+            arr->data[j][i] = tmp;
+        }
+    }
+}
+```
+
 ### Key Features
-- **Coarsening**: Uses serial execution for `n < 25` to reduce spawn overhead
+- **Coarsening (fib.c)**: Uses serial execution for `n < 25` to reduce spawn overhead
   - Threshold determined empirically (tested 19, 25, 30, 35)
   - Balance between parallelism and spawn overhead
   - Reduces number of small tasks created
-- **Parallel Spawn**: Uses `cilk_spawn` for parallel recursive calls when `n >= 25`
-- **Synchronization**: Uses `cilk_sync` to wait for spawned tasks
+- **Parallel Spawn (fib.c)**: Uses `cilk_spawn` for parallel recursive calls when `n >= 25`
+- **Synchronization (fib.c)**: Uses `cilk_sync` to wait for spawned tasks
+- **cilk_for (transpose.c)**: Parallelizes outer loop of triangular matrix transpose
+  - Each iteration is independent (swaps row i with column i)
+  - Inner loop remains serial (sequential swaps within each row/column pair)
 
 ## Notes
 
@@ -195,5 +248,5 @@ int64_t fib(int64_t n) {
 ---
 
 **Last Updated**: 2025-12-19
-**Status**: Checkoff Item 2 Completed ✅ - Next: Checkoff Item 3 (Matrix Transpose)
+**Status**: Checkoff Item 3 Completed ✅ - Next: Homework (Reducer Hyperobjects)
 
