@@ -104,6 +104,21 @@ make fib                  # Build serial version
   - Each outer iteration swaps one row with corresponding column independently
 - **Results**: See Performance Results section below
 
+#### ✅ Checkoff Item 4: Cilksan Race Detection
+- **Status**: Completed
+- **Description**: Use Cilksan to find and fix a determinacy race in parallel quicksort
+- **Race Detection**:
+  - **Location**: Line 50 in `qsort-race.c` - Write to global variable `comparison_count`
+  - **Variable**: `comparison_count` declared at line 31
+  - **Race Type**: Read/Write race - multiple spawned threads write to same global variable
+  - **Cause**: Both recursive calls spawned (lines 44-45) eventually execute line 50,
+    causing concurrent writes to `comparison_count` without synchronization
+- **Fix**:
+  - Removed the global `comparison_count` variable (not needed for sorting)
+  - Changed parallelization to spawn only one recursive call instead of both
+  - This maintains parallelism while eliminating the determinacy race
+- **Verification**: Cilksan confirms 0 races after fix
+
 #### ⏳ Homework: Reducer Hyperobjects
 - **Status**: Not Started
 - **Description**: Implement and test Cilk reducers for various operations
@@ -247,6 +262,39 @@ void transpose(Matrix* arr) {
 
 ---
 
+## Race Detection Results
+
+### Quicksort Race (qsort-race)
+
+**Race Detected by Cilksan:**
+- **Line 50**: Write to `comparison_count` (global variable)
+- **Line 31**: Declaration of `comparison_count`
+- **Lines 44-45**: Both recursive calls spawned, both eventually access shared variable
+- **Race Type**: Determinacy race - multiple threads write to same memory location
+
+**Race Description:**
+The race condition occurred because the naively parallelized quicksort spawned both
+recursive calls (lines 44-45), and each spawned call eventually executed line 50,
+which increments the global `comparison_count` variable. Since multiple threads
+were writing to the same memory location (`comparison_count`) without synchronization,
+this created a determinacy race. The order of writes was non-deterministic, leading
+to potential incorrect results.
+
+**Fix Applied:**
+1. Removed the global `comparison_count` variable (not necessary for sorting)
+2. Changed parallelization strategy: spawn only one recursive call, execute the other serially
+3. This maintains parallelism (one branch runs in parallel) while eliminating the race
+
+**Verification:**
+```bash
+cd hw4/qsort-race
+make clean && make CILKSAN=1
+CILK_NWORKERS=4 ./qsort-race 10 1
+# Output: "Cilksan detected 0 distinct races."
+```
+
+---
+
 **Last Updated**: 2025-12-19
-**Status**: Checkoff Item 3 Completed ✅ - Next: Homework (Reducer Hyperobjects)
+**Status**: Checkoff Item 4 Completed ✅ - Next: Homework (Reducer Hyperobjects)
 
