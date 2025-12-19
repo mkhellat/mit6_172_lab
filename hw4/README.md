@@ -119,6 +119,16 @@ make fib                  # Build serial version
   - This maintains parallelism while eliminating the determinacy race
 - **Verification**: Cilksan confirms 0 races after fix
 
+#### ✅ Checkoff Item 5: Cilkscale Scalability Analysis
+- **Status**: Completed
+- **Description**: Use Cilkscale to analyze scalability of quicksort program
+- **Approach**:
+  - Compiled with `-fcilktool=cilkscale` flag
+  - Used `print_total()` to output scalability metrics
+  - Tested with multiple input sizes to observe parallelism scaling
+- **Results**: See Cilkscale Results section below
+- **Verification**: Cilksan confirms 0 races (no determinacy races)
+
 #### ⏳ Homework: Reducer Hyperobjects
 - **Status**: Not Started
 - **Description**: Implement and test Cilk reducers for various operations
@@ -192,6 +202,49 @@ make fib                  # Build serial version
 { time CILK_NWORKERS=8 ./transpose 10000; }
 ```
 
+### Quicksort Cilkscale Analysis (qsort)
+
+| Input Size | Work (sec) | Span (sec) | Parallelism | Burdened Span (sec) | Burdened Parallelism | Status |
+|------------|------------|------------|-------------|---------------------|----------------------|--------|
+| 100        | 0.000863   | 0.000833   | 1.037       | 0.000908            | 0.951                | ✅     |
+| 1,000      | 0.000979   | 0.000757   | 1.292       | 0.000876            | 1.117                | ✅     |
+| 10,000     | 0.004602   | 0.001640   | 2.805       | 0.001835            | 2.507                | ✅     |
+| 100,000    | 0.047619   | 0.005481   | 8.689       | 0.006231            | 7.643                | ✅     |
+
+**Observations:**
+- **Parallelism increases with input size**: 
+  - Small inputs (100): ~1.04x parallelism (minimal benefit)
+  - Medium inputs (1,000): ~1.29x parallelism
+  - Large inputs (10,000): ~2.81x parallelism
+  - Very large inputs (100,000): ~8.69x parallelism (good scalability)
+- **Work vs Span**: 
+  - Work (T₁) = total serial execution time
+  - Span (T∞) = critical path length (longest dependency chain)
+  - Parallelism = Work / Span = average processors that can be utilized
+- **Burdened metrics**: Account for runtime overhead (scheduling, communication)
+  - Burdened parallelism is slightly lower than ideal parallelism
+  - Still shows good scalability for large inputs
+- **Scaling behavior**: 
+  - Quicksort shows good parallel scalability for larger inputs
+  - Small inputs have limited parallelism due to overhead
+  - Parallelism approaches ~8-9x for large arrays, indicating good utilization of 8+ cores
+
+**Test Command:**
+```bash
+cd hw4/qsort
+make clean && make CILKSCALE=1
+./qsort <size> <seed>
+```
+
+**Cilksan Verification:**
+```bash
+# Verify no races
+make clean
+/opt/opencilk-2/bin/clang -fsanitize=cilk -fopencilk -O3 -o qsort-san qsort.c -fsanitize=cilk
+CILK_NWORKERS=4 ./qsort-san 1000 1
+# Output: "Cilksan detected 0 distinct races."
+```
+
 ## Code Structure
 
 ### fib.c
@@ -246,6 +299,35 @@ void transpose(Matrix* arr) {
 - **cilk_for (transpose.c)**: Parallelizes outer loop of triangular matrix transpose
   - Each iteration is independent (swaps row i with column i)
   - Inner loop remains serial (sequential swaps within each row/column pair)
+- **cilk_spawn (qsort.c)**: Parallelizes quicksort recursive calls
+  - Spawns one recursive call, executes other serially
+  - Each call operates on disjoint array regions (no races)
+  - Good scalability for large inputs (parallelism ~8-9x)
+
+### qsort.c
+```c
+#include <cilk/cilk.h>
+#ifdef CILKSCALE
+#include <cilk/cilkscale.h>
+#endif
+
+void quickSort(data_t arr[], int l, int h) {
+    if (l < h) {
+        int p = partition(arr, l, h);
+        // Parallelize: spawn one call, execute other serially
+        cilk_spawn quickSort(arr, l, p - 1);
+        quickSort(arr, p + 1, h);
+        cilk_sync;
+    }
+}
+
+int main(...) {
+    quickSort(arr, 0, size - 1);
+#ifdef CILKSCALE
+    print_total();  // Print Cilkscale metrics
+#endif
+}
+```
 
 ## Notes
 
@@ -296,5 +378,5 @@ CILK_NWORKERS=4 ./qsort-race 10 1
 ---
 
 **Last Updated**: 2025-12-19
-**Status**: Checkoff Item 4 Completed ✅ - Next: Homework (Reducer Hyperobjects)
+**Status**: Checkoff Item 5 Completed ✅ - Next: Homework (Reducer Hyperobjects)
 
