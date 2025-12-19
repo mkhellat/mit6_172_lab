@@ -2,7 +2,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 
-#include "omp.h"
+#include <cilk/cilk.h>
 
 
 int64_t fib(int64_t n) {
@@ -13,11 +13,9 @@ int64_t fib(int64_t n) {
         y = fib(n - 2);
     }
     else {
-#pragma omp task shared(x)
-        x = fib(n - 1);
-#pragma omp task shared(y)
-        y = fib(n - 2);
-#pragma omp taskwait
+        x = cilk_spawn fib(n - 1);
+        y = cilk_spawn fib(n - 2);
+        cilk_sync;
     }
 
     return (x + y);
@@ -27,16 +25,6 @@ int main(int argc, char* argv[]) {
     int64_t n = atoi(argv[1]);
     int64_t result;
 
-    omp_set_num_threads(4);
-    int nthreads = omp_get_num_threads();
-    printf("N = %d\n", nthreads);
-
-#pragma omp parallel
-    {
-#pragma omp master
-        {
-            result = fib(n);
-        }
-    }
+    result = fib(n);
     printf("Fibonacci of %" PRId64 " is %" PRId64 ".\n", n, result);
 }
