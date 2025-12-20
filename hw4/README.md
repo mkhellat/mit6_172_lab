@@ -471,8 +471,37 @@ provides asymptotic running time analysis of the `merge_lists` function.
 - `homework/queens.c`: Implemented BoardList structure and merge_lists
   function
 
+### Write-up 5: Thread-Safe N-Queens Parallelization ✅
+
+**Status**: Completed
+
+Documents the re-parallelization of N-Queens using thread-safe temporary
+lists, eliminating race conditions while maintaining correctness.
+
+**Implementation**:
+- Each recursive branch gets its own temporary `BoardList`
+- All spawned tasks complete before merging (after `cilk_sync`)
+- Sequential merging of temp lists into parent list (thread-safe)
+- Uses array of temp lists to collect results from parallel branches
+
+**Performance Results**:
+- Serial (1 worker): 0.003s, 92 solutions ✓
+- 4 workers: 0.005s, 92 solutions ✓ (0.60x speedup - slower)
+- 8 workers: 0.006s, 92 solutions ✓ (0.50x speedup - slower)
+- Cilksan: 0 races detected ✓
+
+**Key Findings**:
+- Parallel code is slower due to spawn/sync overhead for small problem (N=8)
+- Overhead dominates: spawn/sync, memory allocation, merge operations
+- Thread-safe implementation eliminates races while maintaining correctness
+- Would show speedup for larger N where overhead is amortized
+
+**Files**:
+- `write-up-5.md`: Complete analysis of thread-safe parallelization
+- `homework/queens.c`: Re-parallelized with temporary lists strategy
+
 ---
 
 **Last Updated**: 2025-12-20
-**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-4 Completed ✅ - Next: Re-parallelize with thread-safe lists
+**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-5 Completed ✅
 

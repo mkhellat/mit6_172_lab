@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <cilk/cilk.h>
 
 // Board representation: each solution is stored as a uint64_t
 // For N=8, we use the lower 8 bits to represent queen positions in each row
@@ -103,20 +104,47 @@ void try(int row, int left, int right, BoardList* board_list) {
         append_board(board_list, (Board)row);
     } else {
         poss = ~(row | left | right) & 0xFF;
+        
+        // Count number of valid positions to allocate array
+        int count = 0;
+        int temp_poss = poss;
+        while (temp_poss != 0) {
+            temp_poss &= temp_poss - 1;  // Clear least significant bit
+            count++;
+        }
+        
+        // Allocate array of temporary lists
+        BoardList* temp_lists = (BoardList*)malloc(count * sizeof(BoardList));
+        if (temp_lists == NULL) {
+            fprintf(stderr, "Failed to allocate memory for temp_lists\n");
+            exit(1);
+        }
+        
+        // Initialize all temp lists
+        for (int i = 0; i < count; i++) {
+            init_list(&temp_lists[i]);
+        }
+        
+        // Spawn all recursive calls with their own temp lists
+        int idx = 0;
         while (poss != 0) {
             place = poss & -poss;
-            // Create a temporary list for this recursive branch
-            BoardList temp_list;
-            init_list(&temp_list);
             
-            // Recursive call (serial for now - will re-parallelize later)
-            try(row | place, (left | place) << 1, (right | place) >> 1, &temp_list);
-            
-            // Merge the temporary list into the main list
-            merge_lists(board_list, &temp_list);
+            // Parallel recursive call - each branch gets its own list
+            cilk_spawn try(row | place, (left | place) << 1, (right | place) >> 1, &temp_lists[idx]);
             
             poss &= ~place;
+            idx++;
         }
+        cilk_sync;
+        
+        // After all spawned tasks complete, merge all temp lists into board_list
+        for (int i = 0; i < count; i++) {
+            merge_lists(board_list, &temp_lists[i]);
+        }
+        
+        // Free the array (lists themselves are already merged, so nodes are in board_list)
+        free(temp_lists);
     }
 }
 
