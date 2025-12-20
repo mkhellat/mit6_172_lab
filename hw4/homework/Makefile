@@ -22,6 +22,12 @@ ifeq ($(PARALLEL), 1)
 	LDFLAGS += -fopencilk
 endif
 
+ifeq ($(CILKSAN), 1)
+	CC := /opt/opencilk-2/bin/clang
+	CFLAGS += -fopencilk -fsanitize=cilk
+	LDFLAGS += -fopencilk -fsanitize=cilk
+endif
+
 ifeq ($(ASSEMBLE),1)
 	CFLAGS += -S
 endif

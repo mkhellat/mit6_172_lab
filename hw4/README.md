@@ -419,8 +419,37 @@ observed.
 - `write-up-2.md`: Complete analysis of parallelization results
 - `homework/queens.c`: Parallelized version with `cilk_spawn`/`cilk_sync`
 
+### Write-up 3: Cilksan Race Detection in N-Queens ✅
+
+**Status**: Completed
+
+Documents the use of Cilksan to detect a determinacy race condition in the
+parallelized N-Queens implementation.
+
+**Key Findings**:
+- Cilksan successfully detected 2 distinct races (suppressed 271 duplicates)
+- Race location: Line 15, column 22 (`++count`)
+- Race type: Read-modify-write on global `count` variable
+- Multiple parallel threads concurrently increment the shared counter,
+  causing lost updates
+
+**Race Condition**:
+Multiple parallel threads simultaneously read and write to the shared global
+`count` variable when they find valid solutions. The `++count` operation is
+not atomic, causing lost increments when multiple threads execute it
+concurrently.
+
+**Line Numbers**:
+- Write: Line 15, column 22 (`++count`)
+- Read: Line 15, column 22 (reading `count` as part of increment)
+- Variable: Line 10 (`static int count = 0;`)
+
+**Files**:
+- `write-up-3.md`: Complete analysis of race detection
+- `homework/Makefile`: Added Cilksan support (`CILKSAN=1`)
+
 ---
 
 **Last Updated**: 2025-12-20
-**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-2 Completed ✅ - Next: Homework (Reducer Hyperobjects)
+**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-3 Completed ✅ - Next: Homework (Reducer Hyperobjects)
 
