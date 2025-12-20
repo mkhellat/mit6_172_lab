@@ -377,6 +377,25 @@ CILK_NWORKERS=4 ./qsort-race 10 1
 
 ---
 
-**Last Updated**: 2025-12-19
-**Status**: Checkoff Item 5 Completed ✅ - Next: Homework (Reducer Hyperobjects)
+---
+
+## Homework Write-ups
+
+### Write-up 1: Tony Lezard's N-Queens Algorithm ✅
+
+**Status**: Completed
+
+Explains how Tony Lezard's 1991 N-Queens implementation works and why only **N bits** are needed for each bit vector (`row`, `left`, `right`) instead of the traditional approach requiring **2N-1 bits** for diagonal vectors.
+
+**Key Insight**: Since the algorithm processes the board row-by-row, we only need to track diagonal threats that affect the current row. The shift operations (`<< 1` for left diagonals, `>> 1` for right diagonals) automatically propagate threats correctly while discarding bits that fall outside the N-bit range.
+
+**Files**:
+- `write-up-1.md`: Detailed explanation with code analysis
+- `homework/queens.c`: Implementation (12 lines of code)
+- Verified: Program correctly finds 92 solutions for N=8
+
+---
+
+**Last Updated**: 2025-12-20
+**Status**: Checkoff Items 1-5 Completed ✅ | Write-up 1 Completed ✅ - Next: Homework (Reducer Hyperobjects)
 
