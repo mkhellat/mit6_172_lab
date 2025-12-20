@@ -448,8 +448,31 @@ concurrently.
 - `write-up-3.md`: Complete analysis of race detection
 - `homework/Makefile`: Added Cilksan support (`CILKSAN=1`)
 
+### Write-up 4: Efficient Linked List Concatenation ✅
+
+**Status**: Completed
+
+Analyzes the most efficient way to concatenate two singly linked lists and
+provides asymptotic running time analysis of the `merge_lists` function.
+
+**Key Findings**:
+- **Most efficient method**: Use a tail pointer for O(1) concatenation
+- **Time complexity**: O(1) - constant time
+- **Space complexity**: O(1) - no additional memory allocation
+- Direct pointer manipulation avoids traversal and copying
+
+**Implementation**:
+- `merge_lists` function merges list2 into list1 and resets list2
+- Handles all edge cases (empty lists, single list, both non-empty)
+- Updates all 3 fields: head, tail, and size
+
+**Files**:
+- `write-up-4.md`: Complete analysis of concatenation efficiency
+- `homework/queens.c`: Implemented BoardList structure and merge_lists
+  function
+
 ---
 
 **Last Updated**: 2025-12-20
-**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-3 Completed ✅ - Next: Homework (Reducer Hyperobjects)
+**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-4 Completed ✅ - Next: Re-parallelize with thread-safe lists
 
