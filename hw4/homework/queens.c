@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <cilk/cilk.h>
 
 static int count = 0;
 
@@ -16,9 +17,10 @@ void try(int row, int left, int right) {
         poss = ~(row | left | right) & 0xFF;
         while (poss != 0) {
             place = poss & -poss;
-            try(row | place, (left | place) << 1, (right | place) >> 1);
+            cilk_spawn try(row | place, (left | place) << 1, (right | place) >> 1);
             poss &= ~place;
         }
+        cilk_sync;
     }
 }
 

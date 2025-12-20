@@ -394,8 +394,33 @@ Explains how Tony Lezard's 1991 N-Queens implementation works and why only **N b
 - `homework/queens.c`: Implementation (12 lines of code)
 - Verified: Program correctly finds 92 solutions for N=8
 
+### Write-up 2: N-Queens Parallelization with Cilk ✅
+
+**Status**: Completed
+
+Documents the parallelization of the N-Queens backtracking algorithm using
+Cilk (`cilk_spawn` and `cilk_sync`) and analyzes why no speedup was
+observed.
+
+**Key Findings**:
+- Parallel version correctly finds 92 solutions (same as serial)
+- **No speedup observed**: Overhead dominates for N=8 (completes in
+  milliseconds)
+- Spawn/sync overhead exceeds parallel benefits for such a small problem
+- Expected behavior: Larger N would show better results, but would need
+  reducers to eliminate contention on global counter
+
+**Performance Results**:
+- 1 worker: 0.003s (baseline)
+- 4 workers: 0.004s (0.75x speedup - slower!)
+- 8 workers: 0.003s (1.00x speedup - no improvement)
+
+**Files**:
+- `write-up-2.md`: Complete analysis of parallelization results
+- `homework/queens.c`: Parallelized version with `cilk_spawn`/`cilk_sync`
+
 ---
 
 **Last Updated**: 2025-12-20
-**Status**: Checkoff Items 1-5 Completed ✅ | Write-up 1 Completed ✅ - Next: Homework (Reducer Hyperobjects)
+**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-2 Completed ✅ - Next: Homework (Reducer Hyperobjects)
 

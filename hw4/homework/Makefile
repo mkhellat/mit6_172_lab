@@ -17,8 +17,9 @@ else
 endif
 
 ifeq ($(PARALLEL), 1)
-	CFLAGS += -Xpreprocessor -fopenmp
-	LDFLAGS += -lomp
+	CC := /opt/opencilk-2/bin/clang
+	CFLAGS += -fopencilk
+	LDFLAGS += -fopencilk
 endif
 
 ifeq ($(ASSEMBLE),1)
