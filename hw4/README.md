@@ -500,8 +500,36 @@ lists, eliminating race conditions while maintaining correctness.
 - `write-up-5.md`: Complete analysis of thread-safe parallelization
 - `homework/queens.c`: Re-parallelized with temporary lists strategy
 
+### Write-up 6: Coarsening N-Queens Recursion ✅
+
+**Status**: Completed
+
+Documents the coarsening optimization applied to N-Queens parallel
+implementation, reducing spawn overhead by switching to serial execution
+when close to the base case.
+
+**Base Case**: When 6 or more queens are placed (`popcount(row) >= 6`),
+execute serially using the original implementation.
+
+**Performance Results**:
+- Serial: 0.003s
+- Parallel with coarsening (4 workers): 0.003s (matches serial!)
+- Parallel with coarsening (8 workers): 0.005s (improved from 0.006s)
+
+**Key Findings**:
+- Coarsening improves parallel performance significantly
+- 4 workers: 40% faster than without coarsening (0.005s → 0.003s)
+- 8 workers: 17% faster than without coarsening (0.006s → 0.005s)
+- With coarsening, 4 workers matches serial performance
+- For N=8, serial is still optimal, but coarsening reduces parallel
+  overhead
+
+**Files**:
+- `write-up-6.md`: Complete analysis of coarsening optimization
+- `homework/queens.c`: Added coarsening with threshold of 6 queens
+
 ---
 
 **Last Updated**: 2025-12-20
-**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-5 Completed ✅
+**Status**: Checkoff Items 1-5 Completed ✅ | Write-ups 1-6 Completed ✅
 

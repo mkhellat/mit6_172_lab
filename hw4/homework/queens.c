@@ -9,6 +9,21 @@
 #include <stdint.h>
 #include <cilk/cilk.h>
 
+// Coarsening threshold: execute serially when this many queens are placed
+// For N=8, threshold of 6 means: if 6+ queens placed, execute serially (2-3 rows left)
+// This reduces spawn overhead for near-base-case recursion
+#define COARSENING_THRESHOLD 6
+
+// Count number of bits set in a value (popcount)
+static inline int popcount(uint8_t x) {
+    int count = 0;
+    while (x != 0) {
+        count++;
+        x &= x - 1;  // Clear least significant bit
+    }
+    return count;
+}
+
 // Board representation: each solution is stored as a uint64_t
 // For N=8, we use the lower 8 bits to represent queen positions in each row
 typedef uint64_t Board;
@@ -95,14 +110,49 @@ void free_list(BoardList* list) {
     list->size = 0;
 }
 
+// Serial version (original implementation without parallelization)
+void try_serial(int row, int left, int right, BoardList* board_list) {
+    int poss, place;
+    // If row bitvector is all 1s, a valid ordering of the queens exists.
+    if (row == 0xFF) {
+        // Found a solution: convert row bitvector to Board representation
+        append_board(board_list, (Board)row);
+    } else {
+        poss = ~(row | left | right) & 0xFF;
+        while (poss != 0) {
+            place = poss & -poss;
+            // Create a temporary list for this recursive branch
+            BoardList temp_list;
+            init_list(&temp_list);
+            
+            // Serial recursive call
+            try_serial(row | place, (left | place) << 1, (right | place) >> 1, &temp_list);
+            
+            // Merge the temporary list into the main list
+            merge_lists(board_list, &temp_list);
+            
+            poss &= ~place;
+        }
+    }
+}
+
+// Parallel version with coarsening
 void try(int row, int left, int right, BoardList* board_list) {
     int poss, place;
     // If row bitvector is all 1s, a valid ordering of the queens exists.
     if (row == 0xFF) {
         // Found a solution: convert row bitvector to Board representation
-        // For now, we'll use row as the board representation
         append_board(board_list, (Board)row);
     } else {
+        // Coarsening: if we're close to the base case, use serial execution
+        int queens_placed = popcount((uint8_t)row);
+        if (queens_placed >= COARSENING_THRESHOLD) {
+            // Use serial version for near-base-case recursion
+            try_serial(row, left, right, board_list);
+            return;
+        }
+        
+        // Parallel execution for earlier recursion levels
         poss = ~(row | left | right) & 0xFF;
         
         // Count number of valid positions to allocate array
