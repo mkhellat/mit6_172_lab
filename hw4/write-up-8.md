@@ -199,7 +199,80 @@ Timing measurements using `{ time CILK_NWORKERS=X ./queens; }`:
 
 ### Performance Analysis
 
-**Why Similar Performance?**
+**Why is Parallel Execution Slower?**
+
+This is a fundamental question in parallel programming. The answer: **overhead
+exceeds benefit** for this small problem size.
+
+#### The Core Problem: Overhead > Work
+
+For N=8 Queens:
+- **Total execution time**: ~0.003 seconds (3 milliseconds)
+- **Only 92 solutions** to find
+- **Problem completes very quickly**
+
+#### Why Parallel is Slower: Detailed Breakdown
+
+**1. Spawn/Sync Overhead**
+
+Each `cilk_spawn` and `cilk_sync` has fixed costs:
+- Task descriptor creation (~microseconds per spawn)
+- Work-stealing queue operations
+- Synchronization barriers at `cilk_sync`
+- Context switching between threads
+
+For a 3ms problem, these costs are **significant relative to the work**.
+
+**2. Work Granularity**
+
+Each recursive call does minimal work:
+- Bit operations (`poss & -poss`, `poss &= ~place`)
+- Simple comparisons (`row == 0xFF`)
+- A few function calls
+
+The spawn overhead can be **larger than the work per task**, making
+parallelization counterproductive.
+
+**3. Reducer Overhead**
+
+While reducers eliminate temp list management, they introduce:
+- Hash-table lookup overhead per reducer access
+- View creation/merging overhead at sync points
+- Runtime reducer management overhead
+
+This adds overhead even though it simplifies the code.
+
+**4. Memory and Cache Effects**
+
+Parallel execution causes:
+- Additional memory allocations (reducer views)
+- Cache misses from context switching
+- Reduced cache locality compared to serial execution
+- Memory bandwidth contention
+
+**5. Load Imbalance**
+
+The backtracking tree is highly irregular:
+- Some branches terminate early (invalid placements)
+- Some branches find many solutions
+- This creates load imbalance, reducing parallel efficiency
+
+#### The Math Behind It
+
+```
+Serial time = Work
+Parallel time = Work/P + Overhead
+
+For speedup: Work/P + Overhead < Work
+Which means: Overhead < Work × (1 - 1/P)
+
+For N=8:
+- Work ≈ 3ms (actual computation)
+- Overhead ≈ 2-3ms (spawn/sync/reducer)
+- Result: 3ms + 2ms = 5-6ms (slower!)
+```
+
+**Why Similar Performance Between Approaches?**
 
 1. **Problem Size**: For N=8, the problem completes in milliseconds. Overhead
    dominates actual computation time.
@@ -214,6 +287,35 @@ Timing measurements using `{ time CILK_NWORKERS=X ./queens; }`:
    - Eliminated: Temp list array allocation/deallocation
    - Added: Reducer view management overhead
    - Result: Similar overall performance
+
+#### When Would Parallel Help?
+
+For larger N (e.g., N=12, N=16):
+- **More work per task**: Overhead becomes relatively smaller
+- **Deeper recursion tree**: More parallelism opportunities
+- **Better amortization**: Fixed overhead costs spread over more work
+
+**Example Calculation**:
+- If work = 1 second and overhead = 2ms:
+  - Serial: 1.000s
+  - Parallel (4 workers): 0.250s + 0.002s = 0.252s → **~4x speedup** ✓
+
+**For N=8**:
+- Work = 3ms, Overhead = 2-3ms
+- Serial: 3ms
+- Parallel (4 workers): 0.75ms + 2ms = 2.75ms (theoretical)
+- **But**: Overhead dominates, actual result: 5-6ms (slower)
+
+#### This is Expected Behavior
+
+**This is completely normal** for small problems! Parallelization helps when:
+
+1. **Work >> Overhead** (large problems)
+2. **Good load balance** (uniform work distribution)
+3. **Sufficient parallelism** (enough independent work)
+
+For N=8, the problem is **too small** to overcome the overhead. This is a
+fundamental trade-off in parallel programming.
 
 **Expected Behavior for Larger N**:
 - Reducers would show more benefit for larger problems
