@@ -28,6 +28,15 @@ MIT OCW on performance engineering:
 - [Vector Patterns - Clang Loop Pragma Vectorization](hw3/write-up-14.md)
 - [Vector Patterns - Reduction Loop Vectorization Analysis](hw3/write-up-15.md)
 
+## Homework 4: Multicore Programming with Cilk
+- [Homework 4 Overview](hw4/README.md) - Cilk parallelization and reducer hyperobjects
+  - ✅ Serial Fibonacci timing
+  - ✅ Parallelize Fibonacci with Cilk (`cilk_spawn`, `cilk_sync`)
+  - ⏳ Checkoff Item 1: Performance measurements (1, 4, 8 workers)
+  - ⏳ Checkoff Item 2: Coarsening optimization
+  - ⏳ Checkoff Item 3: Matrix transpose parallelization
+  - ⏳ Reducer hyperobjects implementation
+
 ## Project 1: Bit-array Cyclic Rotation
 - [Project 1 Overview](prj1/00-project1-introduction.md)
   - [The Inplace Mandate](prj1/00-project1-the-inplace-mandate.md)

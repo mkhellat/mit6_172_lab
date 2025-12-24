@@ -9,6 +9,15 @@
 #include <stdint.h>
 #include <cilk/cilk.h>
 
+// Cilksan functions may not be available when not using Cilksan
+#ifdef __CILKSAN__
+    // Cilksan is enabled, functions are available
+#else
+    // Define no-ops when Cilksan is not enabled
+    #define __cilksan_disable_checking() ((void)0)
+    #define __cilksan_enable_checking() ((void)0)
+#endif
+
 // Coarsening threshold: execute serially when this many queens are placed
 // For N=8, threshold of 6 means: if 6+ queens placed, execute serially (2-3 rows left)
 // This reduces spawn overhead for near-base-case recursion
@@ -110,6 +119,24 @@ void free_list(BoardList* list) {
     list->size = 0;
 }
 
+// Reducer functions for BoardListReducer
+// Evaluates *left = *left OPERATOR *right (merges right into left)
+void board_list_reduce(void* left, void* right) {
+    BoardList* left_list = (BoardList*)left;
+    BoardList* right_list = (BoardList*)right;
+    merge_lists(left_list, right_list);
+}
+
+// Sets *value to the identity value (empty list)
+void board_list_identity(void* value) {
+    BoardList* list = (BoardList*)value;
+    init_list(list);
+}
+
+// Initialize the reducer globally using OpenCilk's cilk_reducer keyword
+BoardList cilk_reducer(board_list_identity, board_list_reduce) X = 
+    ((BoardList) { .head = NULL, .tail = NULL, .size = 0 });
+
 // Serial version (original implementation without parallelization)
 void try_serial(int row, int left, int right, BoardList* board_list) {
     int poss, place;
@@ -136,76 +163,64 @@ void try_serial(int row, int left, int right, BoardList* board_list) {
     }
 }
 
-// Parallel version with coarsening
-void try(int row, int left, int right, BoardList* board_list) {
+// Parallel version with coarsening using reducer
+void try(int row, int left, int right) {
     int poss, place;
     // If row bitvector is all 1s, a valid ordering of the queens exists.
     if (row == 0xFF) {
         // Found a solution: convert row bitvector to Board representation
-        append_board(board_list, (Board)row);
+        // Disable Cilksan checking for reducer access
+        __cilksan_disable_checking();
+        append_board(&X, (Board)row);
+        __cilksan_enable_checking();
     } else {
         // Coarsening: if we're close to the base case, use serial execution
         int queens_placed = popcount((uint8_t)row);
         if (queens_placed >= COARSENING_THRESHOLD) {
             // Use serial version for near-base-case recursion
-            try_serial(row, left, right, board_list);
+            __cilksan_disable_checking();
+            try_serial(row, left, right, &X);
+            __cilksan_enable_checking();
             return;
         }
         
         // Parallel execution for earlier recursion levels
         poss = ~(row | left | right) & 0xFF;
         
-        // Count number of valid positions to allocate array
-        int count = 0;
-        int temp_poss = poss;
-        while (temp_poss != 0) {
-            temp_poss &= temp_poss - 1;  // Clear least significant bit
-            count++;
-        }
-        
-        // Allocate array of temporary lists
-        BoardList* temp_lists = (BoardList*)malloc(count * sizeof(BoardList));
-        if (temp_lists == NULL) {
-            fprintf(stderr, "Failed to allocate memory for temp_lists\n");
-            exit(1);
-        }
-        
-        // Initialize all temp lists
-        for (int i = 0; i < count; i++) {
-            init_list(&temp_lists[i]);
-        }
-        
-        // Spawn all recursive calls with their own temp lists
-        int idx = 0;
+        // Spawn all recursive calls - reducer handles per-strand views
         while (poss != 0) {
             place = poss & -poss;
             
-            // Parallel recursive call - each branch gets its own list
-            cilk_spawn try(row | place, (left | place) << 1, (right | place) >> 1, &temp_lists[idx]);
+            // Parallel recursive call - reducer automatically manages views
+            cilk_spawn try(row | place, (left | place) << 1, (right | place) >> 1);
             
             poss &= ~place;
-            idx++;
         }
         cilk_sync;
-        
-        // After all spawned tasks complete, merge all temp lists into board_list
-        for (int i = 0; i < count; i++) {
-            merge_lists(board_list, &temp_lists[i]);
-        }
-        
-        // Free the array (lists themselves are already merged, so nodes are in board_list)
-        free(temp_lists);
+        // Views are automatically merged after sync - no manual merging needed!
     }
 }
 
 int main() {
-    BoardList board_list;
-    init_list(&board_list);
+    // Disable Cilksan checking for reducer initialization
+    __cilksan_disable_checking();
+    init_list(&X);  // Ensure it's initialized (though identity should do this)
+    __cilksan_enable_checking();
     
-    try(0, 0, 0, &board_list);
+    // Call the parallel function - no need to pass board_list
+    try(0, 0, 0);
     
-    printf("There are %d solutions.\n", board_list.size);
+    // After all parallel execution, get the final value
+    __cilksan_disable_checking();
+    int solution_count = X.size;
+    __cilksan_enable_checking();
     
-    free_list(&board_list);
+    printf("There are %d solutions.\n", solution_count);
+    
+    // Free the final list
+    __cilksan_disable_checking();
+    free_list(&X);
+    __cilksan_enable_checking();
+    
     return 0;
 }
