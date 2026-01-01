@@ -1,0 +1,18 @@
+# Generated plots
+plots/*.png
+plots/*.pdf
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Temporary files
+*.tmp
+*.log
+
+# LISP compiled files
+*.fasl
+*.fas
+*.o
+
