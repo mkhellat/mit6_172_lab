@@ -15,10 +15,16 @@
 - [Finding a Contradiction](#finding-a-contradiction)
   - [Step 1: Combine Span Law Constraints](#step-1-combine-span-law-constraints)
   - [Step 2: Check Consistency of $T_4$ and $T_{10}$](#step-2-check-consistency-of-t_4-and-t_10)
-  - [Step 3: The Contradiction](#step-3-the-contradiction)
+- [Visual Summary of Constraints](#visual-summary-of-constraints)
+  - [Constraint Relationships](#constraint-relationships)
+  - [Constraint Values Summary](#constraint-values-summary)
 - [Intuitive Understanding of the Contradiction](#intuitive-understanding-of-the-contradiction)
+  - [Why the Measurements Cannot All Be Correct](#why-the-measurements-cannot-all-be-correct)
+  - [The Greedy Scheduler Bound in Action](#the-greedy-scheduler-bound-in-action)
+  - [Pairwise Compatibility Analysis](#pairwise-compatibility-analysis)
+  - [Visual Plot of the Contradiction](#visual-plot-of-the-contradiction)
+  - [Plot Generation Code](#plot-generation-code)
 - [What Could Have Gone Wrong?](#what-could-have-gone-wrong)
-- [Which Measurement(s) Are Likely Wrong?](#which-measurements-are-likely-wrong)
 - [Conclusion](#conclusion)
 
 ---
@@ -133,27 +139,53 @@ $$
 This is **impossible**! There is no value of $T_1$ that satisfies both
 $339 \leq T_1$ and $T_1 \leq 320$.
 
-### Step 3: The Contradiction
-
-From $T_{64} = 9$ (Span Law), we have $T_{\infty} \leq 9$.
-
-Combining this with the greedy scheduler bounds:
-- From $T_4$: $T_1 \geq 320 - 3T_{\infty} \geq 320 - 3(9) = 293$
-- From $T_{10}$: $T_1 \geq 420 - 9T_{\infty} \geq 420 - 9(9) = 339$
-
-From the Work Law:
-- From $T_4$: $T_1 \leq 320$
-
-Therefore, we need:
-
-$$
-339 \leq T_1 \leq 320
-$$
-
-which is **impossible**.
-
 This contradiction proves that **at least one measurement is
 incorrect**.
+
+---
+
+## Visual Summary of Constraints
+
+Now that we've derived the contradiction step-by-step, here's a summary of how
+the constraints from each measurement relate to each other:
+
+### Constraint Relationships
+
+The three measurements create constraints that must be satisfied simultaneously:
+
+```mermaid
+flowchart LR
+    T4[T₄ = 80s] --> C4[Constraints]
+    T10[T₁₀ = 42s] --> C10[Constraints]
+    T64[T₆₄ = 9s] --> C64[Constraints]
+    
+    C4 --> Combine[Combine All]
+    C10 --> Combine
+    C64 --> Combine
+    
+    Combine --> Check{Check<br/>Consistency}
+    Check -->|No Overlap| Impossible[IMPOSSIBLE]
+    
+    style T64 fill:#ff9999
+    style Impossible fill:#ff0000,color:#fff
+    style Check fill:#ffff99
+```
+
+**Key insight**: When we apply the tightest span constraint ($T_{\infty} \leq 9$ from $T_{64}$)
+and combine it with the greedy scheduler bounds from $T_4$ and $T_{10}$, we get
+incompatible requirements on $T_1$, leading to the contradiction $339 \leq T_1 \leq 320$
+(see [Step 2](#step-2-check-consistency-of-t_4-and-t_10) above for the detailed derivation).
+
+### Constraint Values Summary
+
+| Measurement   | Work Law       | Span Law               | Greedy Bound (when $T_{\infty} = 9$) |
+|---------------|----------------|------------------------|--------------------------------------|
+| $T_4 = 80$    | $T_1 \leq 320$ | $T_{\infty} \leq 80$   | $T_1 \geq 293$                       |
+| $T_{10} = 42$ | $T_1 \leq 420$ | $T_{\infty} \leq 42$   | $T_1 \geq 339$                       |
+| $T_{64} = 9$  | $T_1 \leq 576$ | $T_{\infty} \leq 9$ ⭐ | $T_1 \geq 10$                        |
+
+**Note**: For generating actual 2D plots of the feasible regions, see the
+[Plot Generation Code](#plot-generation-code) section below.
 
 ---
 
@@ -183,17 +215,12 @@ and the work is large (from $T_{10}$), then with 4 processors we should see
 better performance than 80 seconds. Conversely, if the work is limited (from
 $T_4$), then with 10 processors we shouldn't need 42 seconds.
 
-### Visual Interpretation
-
-Think of the measurements as constraints in a 2D space (work vs. span):
-
-- **$T_4 = 80$** creates a region: "Work is low, span can be anything up to
-  80"
-- **$T_{10} = 42$** creates a region: "Given short span, work must be high"
-- **$T_{64} = 9$** creates a region: "Span is very short"
-
-When we combine these regions, **they don't overlap**—there's no point
-$(T_1, T_{\infty})$ that satisfies all three constraints simultaneously.
+**Geometric interpretation**: Think of the measurements as constraints in a 2D
+space (work vs. span). When we combine the feasible regions from all three
+measurements, **they don't overlap**—there's no point $(T_1, T_{\infty})$ that
+satisfies all three constraints simultaneously. The actual 2D visualization of
+this contradiction is shown in the [Visual Plot of the Contradiction](#visual-plot-of-the-contradiction)
+section below.
 
 ### The Greedy Scheduler Bound in Action
 
@@ -205,19 +232,249 @@ the key to detecting the inconsistency. This bound says:
 
 When we apply this bound to different processor counts, we get different
 constraints on $T_1$ and $T_{\infty}$. The measurements violate these
-constraints, revealing the inconsistency.
+constraints, revealing the inconsistency. The contradiction emerges from the
+**interaction** between the Work Law and the greedy scheduler bound across
+different processor counts, as shown in [Step 2](#step-2-check-consistency-of-t_4-and-t_10).
 
-**Example**: If $T_{\infty} = 9$ (from $T_{64}$), then:
-- With 10 processors: $T_{10} \leq (T_1 - 9)/10 + 9$
-- If $T_{10} = 42$, we need $T_1 \geq 339$
-- But with 4 processors: $T_4 \leq (T_1 - 9)/4 + 9$
-- If $T_1 \geq 339$, then $T_4 \leq (339 - 9)/4 + 9 = 91.5$
-- But we measured $T_4 = 80$, which is consistent with this bound
-- However, the Work Law says $T_1 \leq 320$ (from $T_4$), contradicting $T_1
-  \geq 339$
+### Pairwise Compatibility Analysis
 
-The contradiction emerges from the **interaction** between the Work Law and
-the greedy scheduler bound across different processor counts.
+To understand which measurement is incompatible, let's examine each pair of
+measurements:
+
+#### T₄ and T₁₀: Compatible
+
+![T₄ and T₁₀ Compatibility](plots/t4_t10_compatible.png)
+
+When considering only $T_4 = 80$ and $T_{10} = 42$:
+- **Tightest span constraint**: $T_{\infty} \leq 42$ (from $T_{10}$)
+- **When $T_{\infty} \leq 42$**:
+  - From $T_4$ greedy bound: $T_1 \geq 320 - 3(42) = 194$
+  - From $T_{10}$ greedy bound: $T_1 \geq 420 - 9(42) = 42$
+  - From $T_4$ work law: $T_1 \leq 320$
+  - From $T_{10}$ work law: $T_1 \leq 420$
+
+**Result**: $194 \leq T_1 \leq 320$ is **feasible** ✓
+
+The purple shaded region shows the feasible region where both measurements can
+be satisfied simultaneously. **$T_4$ and $T_{10}$ are compatible.**
+
+#### T₄ and T₆₄: Compatible
+
+![T₄ and T₆₄ Compatibility](plots/t4_t64_compatible.png)
+
+When considering only $T_4 = 80$ and $T_{64} = 9$:
+- **Tightest span constraint**: $T_{\infty} \leq 9$ (from $T_{64}$)
+- **When $T_{\infty} \leq 9$**:
+  - From $T_4$ greedy bound: $T_1 \geq 320 - 3(9) = 293$
+  - From $T_{64}$ greedy bound: $T_1 \geq 576 - 63(9) = -9$ (not restrictive)
+  - From $T_4$ work law: $T_1 \leq 320$
+  - From $T_{64}$ work law: $T_1 \leq 576$
+
+**Result**: $293 \leq T_1 \leq 320$ is **feasible** ✓
+
+The purple shaded region shows the feasible region. **$T_4$ and $T_{64}$ are
+compatible.**
+
+#### T₁₀ and T₆₄: Compatible
+
+![T₁₀ and T₆₄ Compatibility](plots/t10_t64_compatible.png)
+
+When considering only $T_{10} = 42$ and $T_{64} = 9$:
+- **Tightest span constraint**: $T_{\infty} \leq 9$ (from $T_{64}$)
+- **When $T_{\infty} \leq 9$**:
+  - From $T_{10}$ greedy bound: $T_1 \geq 420 - 9(9) = 339$
+  - From $T_{64}$ greedy bound: $T_1 \geq 576 - 63(9) = -9$ (not restrictive)
+  - From $T_{10}$ work law: $T_1 \leq 420$
+  - From $T_{64}$ work law: $T_1 \leq 576$
+
+**Result**: $339 \leq T_1 \leq 420$ is **feasible** ✓
+
+The purple shaded region shows the feasible region. **$T_{10}$ and $T_{64}$ are
+compatible.**
+
+#### Summary: All Pairs Are Compatible!
+
+**Key insight**: Each pair of measurements is compatible when considered in
+isolation:
+- ✓ $T_4$ and $T_{10}$: $194 \leq T_1 \leq 320$ (when $T_{\infty} \leq 42$)
+- ✓ $T_4$ and $T_{64}$: $293 \leq T_1 \leq 320$ (when $T_{\infty} \leq 9$)
+- ✓ $T_{10}$ and $T_{64}$: $339 \leq T_1 \leq 420$ (when $T_{\infty} \leq 9$)
+
+**The contradiction only arises when all three measurements are considered
+together**:
+- From $T_4$ and $T_{64}$: $293 \leq T_1 \leq 320$
+- From $T_{10}$ and $T_{64}$: $339 \leq T_1 \leq 420$
+- **No overlap**: $339 \leq T_1 \leq 320$ is impossible!
+
+This demonstrates that **$T_{64}$ is incompatible with the combination of $T_4$
+and $T_{10}$**, even though it's compatible with each individually.
+
+### Visual Plot of the Contradiction
+
+The following plot visualizes all constraints and clearly demonstrates the
+contradiction:
+
+![Contradiction Plot](plots/contradiction_plot.png)
+
+**What the plot shows**:
+
+1. **Constraint Lines**:
+   - **Blue lines**: Constraints from $T_4 = 80$
+     - Dashed vertical line: Work Law ($T_1 \leq 320$)
+     - Solid diagonal line: Greedy Scheduler Bound ($T_1 \geq 320 - 3T_{\infty}$)
+     - Dotted horizontal line: Span Law ($T_{\infty} \leq 80$)
+   
+   - **Green lines**: Constraints from $T_{10} = 42$
+     - Dashed vertical line: Work Law ($T_1 \leq 420$)
+     - Solid diagonal line: Greedy Scheduler Bound ($T_1 \geq 420 - 9T_{\infty}$)
+     - Dotted horizontal line: Span Law ($T_{\infty} \leq 42$)
+   
+   - **Red lines**: Constraints from $T_{64} = 9$
+     - Dashed vertical line: Work Law ($T_1 \leq 576$)
+     - Solid diagonal line: Greedy Scheduler Bound ($T_1 \geq 576 - 63T_{\infty}$)
+     - Thick dotted horizontal line: Span Law ($T_{\infty} \leq 9$) ⭐ **tightest constraint**
+
+2. **Feasible Regions** (when $T_{\infty} \leq 9$):
+   - **Blue shaded region**: Feasible region from $T_4$ measurements
+     - Bounded by: $T_1 \geq 293$ (from greedy bound) and $T_1 \leq 320$ (from work law)
+     - Represents: $293 \leq T_1 \leq 320$ when $T_{\infty} \leq 9$
+   
+   - **Green shaded region**: Feasible region from $T_{10}$ measurements
+     - Bounded by: $T_1 \geq 339$ (from greedy bound) and $T_1 \leq 420$ (from work law)
+     - Represents: $339 \leq T_1 \leq 420$ when $T_{\infty} \leq 9$
+
+3. **The Contradiction**:
+   - The blue and green regions **do not overlap**
+   - There is a **gap** between $T_1 = 320$ (end of blue region) and $T_1 = 339$ (start of green region)
+   - The red annotation highlights: **339 ≤ T₁ ≤ 320 is IMPOSSIBLE**
+   - This gap of 19 units (339 - 320) represents the contradiction
+
+4. **Key Observations**:
+   - The red horizontal line at $T_{\infty} = 9$ is the **tightest span constraint**
+   - When we apply this constraint, the greedy scheduler bounds create incompatible requirements
+   - The blue region requires $T_1 \leq 320$, while the green region requires $T_1 \geq 339$
+   - **No point** $(T_1, T_{\infty})$ can satisfy both requirements simultaneously
+
+**Why this visualization is powerful**:
+- It makes the abstract mathematical contradiction **visually concrete**
+- The gap between regions is immediately apparent
+- All constraint types (Work Law, Span Law, Greedy Scheduler Bound) are clearly distinguished
+- The plot shows that the contradiction is not a subtle edge case, but a **fundamental incompatibility**
+
+### Plot Generation Code
+
+The plots in this write-up are generated using Python scripts located in the
+`scripts/` directory. The generated plots are saved in the `plots/` directory.
+
+**Available scripts**:
+- `scripts/generate_contradiction_plot.py`: Generates the main contradiction plot
+- `scripts/generate_pairwise_plots.py`: Generates all pairwise compatibility plots
+
+**To regenerate plots**, run from the `hw5/` directory:
+```bash
+cd hw5
+python3 scripts/generate_contradiction_plot.py
+python3 scripts/generate_pairwise_plots.py
+```
+
+For generating high-quality 2D plots of the feasible regions, use the following
+Python code with matplotlib:
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Create figure
+fig, ax = plt.subplots(figsize=(12, 8))
+
+# Define T_infinity range
+T_inf = np.linspace(0, 15, 1000)
+
+# Constraint lines from T_4 = 80
+T1_T4_work = np.full_like(T_inf, 320)  # T_1 ≤ 320
+T1_T4_greedy = 320 - 3 * T_inf  # T_1 ≥ 320 - 3T_∞
+
+# Constraint lines from T_10 = 42
+T1_T10_work = np.full_like(T_inf, 420)  # T_1 ≤ 420
+T1_T10_greedy = 420 - 9 * T_inf  # T_1 ≥ 420 - 9T_∞
+
+# Constraint lines from T_64 = 9
+T1_T64_work = np.full_like(T_inf, 576)  # T_1 ≤ 576
+T1_T64_greedy = 576 - 63 * T_inf  # T_1 ≥ 576 - 63T_∞
+
+# Plot constraint lines
+ax.plot(T1_T4_work, T_inf, 'b--', label='T₄ Work Law: T₁ ≤ 320', linewidth=2)
+ax.plot(T1_T4_greedy, T_inf, 'b-', label='T₄ Greedy Bound: T₁ ≥ 320 - 3T∞', linewidth=2)
+ax.plot(T1_T10_work, T_inf, 'g--', label='T₁₀ Work Law: T₁ ≤ 420', linewidth=2)
+ax.plot(T1_T10_greedy, T_inf, 'g-', label='T₁₀ Greedy Bound: T₁ ≥ 420 - 9T∞', linewidth=2)
+ax.plot(T1_T64_work, T_inf, 'r--', label='T₆₄ Work Law: T₁ ≤ 576', linewidth=2)
+ax.plot(T1_T64_greedy, T_inf, 'r-', label='T₆₄ Greedy Bound: T₁ ≥ 576 - 63T∞', linewidth=2)
+
+# Span Law horizontal lines
+ax.axhline(y=80, color='b', linestyle=':', alpha=0.5, label='T₄ Span Law: T∞ ≤ 80')
+ax.axhline(y=42, color='g', linestyle=':', alpha=0.5, label='T₁₀ Span Law: T∞ ≤ 42')
+ax.axhline(y=9, color='r', linestyle=':', linewidth=3, label='T₆₄ Span Law: T∞ ≤ 9 ⭐', alpha=0.7)
+
+# Highlight feasible regions when T∞ ≤ 9
+T_inf_constrained = np.linspace(0, 9, 1000)
+T1_T4_feasible_low = 320 - 3 * T_inf_constrained
+T1_T4_feasible_high = np.full_like(T_inf_constrained, 320)
+T1_T10_feasible_low = 420 - 9 * T_inf_constrained
+T1_T10_feasible_high = np.full_like(T_inf_constrained, 420)
+
+# Fill feasible regions
+ax.fill_betweenx(T_inf_constrained, T1_T4_feasible_low, T1_T4_feasible_high, 
+                 where=(T1_T4_feasible_low <= T1_T4_feasible_high),
+                 alpha=0.3, color='blue', label='T₄ Feasible Region (T∞ ≤ 9)')
+ax.fill_betweenx(T_inf_constrained, T1_T10_feasible_low, T1_T10_feasible_high,
+                 where=(T1_T10_feasible_low <= T1_T10_feasible_high),
+                 alpha=0.3, color='green', label='T₁₀ Feasible Region (T∞ ≤ 9)')
+
+# Mark the contradiction
+ax.axvline(x=293, color='blue', linestyle='--', alpha=0.5)
+ax.axvline(x=320, color='blue', linestyle='--', alpha=0.5)
+ax.axvline(x=339, color='green', linestyle='--', alpha=0.5)
+ax.fill_between([293, 320], 0, 9, alpha=0.2, color='blue', hatch='///')
+ax.fill_between([339, 420], 0, 9, alpha=0.2, color='green', hatch='\\\\\\')
+ax.text(306.5, 4.5, '❌ NO OVERLAP!\nContradiction:\n339 ≤ T₁ ≤ 320', 
+        bbox=dict(boxstyle='round', facecolor='red', alpha=0.7, edgecolor='black'),
+        fontsize=12, ha='center', color='white', weight='bold')
+
+# Labels and title
+ax.set_xlabel('T₁ (Work)', fontsize=14)
+ax.set_ylabel('T∞ (Span)', fontsize=14)
+ax.set_title('Feasible Regions in (T₁, T∞) Space\nShowing the Contradiction', fontsize=16, weight='bold')
+ax.legend(loc='upper right', fontsize=10)
+ax.grid(True, alpha=0.3)
+ax.set_xlim(0, 600)
+ax.set_ylim(0, 20)
+
+plt.tight_layout()
+plt.savefig('plots/contradiction_plot.png', dpi=300, bbox_inches='tight')
+plt.show()
+```
+
+This code generates a publication-quality plot showing:
+- All constraint lines (Work Law, Span Law, Greedy Scheduler Bound)
+- Feasible regions for each measurement when $T_{\infty} \leq 9$
+- The gap between regions demonstrating the contradiction
+- Clear annotations highlighting the impossible region
+
+**Constraint line equations**:
+- **From $T_4 = 80$:**
+  - Work Law: $T_1 = 320$ (vertical line)
+  - Span Law: $T_{\infty} = 80$ (horizontal line)
+  - Greedy Bound: $T_1 = 320 - 3T_{\infty}$ (diagonal, slope = -3)
+
+- **From $T_{10} = 42$:**
+  - Work Law: $T_1 = 420$ (vertical line)
+  - Span Law: $T_{\infty} = 42$ (horizontal line)
+  - Greedy Bound: $T_1 = 420 - 9T_{\infty}$ (diagonal, slope = -9)
+
+- **From $T_{64} = 9$:**
+  - Work Law: $T_1 = 576$ (vertical line)
+  - Span Law: $T_{\infty} = 9$ (horizontal line) ⭐ tightest
+  - Greedy Bound: $T_1 = 576 - 63T_{\infty}$ (diagonal, slope = -63)
 
 ---
 
@@ -256,63 +513,34 @@ the greedy scheduler bound across different processor counts.
 
 ### Most Likely Scenarios
 
-Given the specific contradiction ($339 \leq T_1 \leq 320$), the most likely
-issues are:
+Given the pairwise compatibility analysis showing that:
+- ✓ $T_4$ and $T_{10}$ are compatible
+- ✓ $T_4$ and $T_{64}$ are compatible
+- ✓ $T_{10}$ and $T_{64}$ are compatible
+- ❌ All three together are incompatible
 
-1. **$T_4$ or $T_{10}$ is wrong**: One of these measurements doesn't reflect
-   the true execution time, possibly due to system load, measurement error,
-   or inconsistent conditions.
+The most likely scenarios are:
 
-2. **$T_{64}$ is wrong**: If the span is actually longer than 9 seconds, the
-   contradiction might resolve. However, this seems less likely given that
-   $T_{64} = 9$ is the fastest measurement.
+1. **$T_{64}$ is wrong** (most likely): Since $T_4$ and $T_{10}$ are compatible
+   with each other, and each is compatible with $T_{64}$ individually, but all
+   three together create a contradiction, **$T_{64}$ is the problematic
+   measurement**. The contradiction arises because $T_{64} = 9$ forces
+   $T_{\infty} \leq 9$, which creates incompatible requirements when combined
+   with $T_4$ and $T_{10}$.
+
+   **Possible reasons**:
+   - $T_{64}$ might actually be slower than 9 seconds (measurement error)
+   - The span might be longer than 9 seconds, making $T_{64}$ inconsistent
+   - System conditions during the $T_{64}$ measurement were different
+
+2. **$T_4$ or $T_{10}$ is wrong** (less likely): While these two are compatible
+   with each other, one could still be incorrect. However, since they work
+   together and each works with $T_{64}$, this scenario is less likely.
 
 3. **Non-deterministic algorithm**: If the algorithm has non-deterministic
    behavior, different runs might produce different execution times,
-   invalidating the assumption of a deterministic program.
-
----
-
-## Which Measurement(s) Are Likely Wrong?
-
-### Analyzing Each Measurement
-
-**$T_4 = 80$ seconds**:
-- Implies: $T_1 \leq 320$ (Work Law)
-- Implies: $T_1 \geq 293$ when $T_{\infty} \leq 9$ (greedy scheduler bound)
-- **Consistency check**: These bounds are consistent ($293 \leq 320$)
-- **Likelihood of error**: Medium—could be affected by system load or
-  measurement overhead
-
-**$T_{10} = 42$ seconds**:
-- Implies: $T_1 \leq 420$ (Work Law)
-- Implies: $T_1 \geq 339$ when $T_{\infty} \leq 9$ (greedy scheduler bound)
-- **Consistency check**: These bounds are consistent ($339 \leq 420$)
-- **Likelihood of error**: Medium—similar to $T_4$
-
-**$T_{64} = 9$ seconds**:
-- Implies: $T_{\infty} \leq 9$ (Span Law)
-- Implies: $T_1 \leq 576$ (Work Law)
-- Implies: $T_1 \geq 10$ when $T_{\infty} \leq 9$ (greedy scheduler bound)
-- **Consistency check**: These bounds are very loose and consistent
-- **Likelihood of error**: Lower—this is the fastest measurement, and errors
-  typically make things slower, not faster
-
-### The Contradiction Pattern
-
-The contradiction $339 \leq T_1 \leq 320$ suggests:
-
-- **$T_{10} = 42$** requires $T_1 \geq 339$ (from greedy scheduler bound)
-- **$T_4 = 80$** requires $T_1 \leq 320$ (from Work Law)
-
-These two measurements are **directly conflicting**. If we assume $T_{64} = 9$
-is correct (which is reasonable, as it's the tightest constraint and fastest
-measurement), then:
-
-- **Most likely**: Either $T_4$ or $T_{10}$ is incorrect
-- **Less likely**: Both $T_4$ and $T_{10}$ are incorrect
-- **Unlikely**: $T_{64}$ is incorrect (would require it to be slower, which
-  is less common for measurement errors)
+   invalidating the assumption of a deterministic program. This could explain
+   why measurements are inconsistent.
 
 ### Practical Investigation Steps
 
@@ -341,21 +569,8 @@ To identify which measurement is wrong, Ben should:
 
 ## Conclusion
 
-The measurements are **inconsistent**. The contradiction arises as
-follows:
-
-1. From $T_{64} = 9$ (Span Law): $T_{\infty} \leq 9$
-2. From $T_{10} = 42$ (greedy scheduler bound): $T_1 \geq 420 -
-9T_{\infty} \geq 420 - 81 = 339$
-3. From $T_4 = 80$ (Work Law): $T_1 \leq 320$
-
-These constraints require:
-
-$$
-339 \leq T_1 \leq 320
-$$
-
-which is **impossible**.
+The measurements are **inconsistent**. As shown in [Finding a Contradiction](#finding-a-contradiction),
+the three measurements lead to the impossible requirement $339 \leq T_1 \leq 320$.
 
 **Therefore, at least one of the measurements ($T_4$, $T_{10}$, or $T_{64}$) must be incorrect.**
 
