@@ -104,7 +104,8 @@ class ConstraintChecker:
 (load "{self.lisp_solver_path.absolute()}")
 (let ((result (constraint-solver:check-measurements {lisp_input})))
   (constraint-solver:format-result-readable result)
-  (princ (constraint-solver:format-result-json result)))
+  (princ (constraint-solver:format-result-json result))
+  (ext:quit))
 """
         
         try:
