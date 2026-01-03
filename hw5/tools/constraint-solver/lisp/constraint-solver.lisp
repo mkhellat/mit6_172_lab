@@ -11,7 +11,9 @@
   (:export :check-measurements
            :derive-constraints
            :check-pairwise-compatibility
-           :find-contradiction))
+           :find-contradiction
+           :format-result-readable
+           :format-result-json))
 
 (in-package :constraint-solver)
 
@@ -129,17 +131,26 @@
 ;;; ============================================================================
 
 (defun format-result-json (result)
-  "Format result as JSON-like string for Python consumption"
+  "Format result as JSON string for Python consumption"
   (let ((overall (getf result :overall))
         (pairwise (getf result :pairwise)))
-    (format nil "{~%  \"status\": \"~A\",~%  \"contradiction\": ~S,~%  \"pairwise\": [~{~A~^,~}~%  ]~%}"
-            (string-downcase (string (getf overall :status)))
-            (getf overall :contradiction)
-            (mapcar (lambda (p)
-                      (format nil "~%    {\"pair\": ~A, \"compatible\": ~A}"
-                              (getf p :pair)
-                              (if (getf p :compatible) "true" "false")))
-                    pairwise))))
+    (let ((contradiction-str (if (getf overall :contradiction)
+                                 (format nil "\"~A\"" (getf overall :contradiction))
+                                 "null"))
+          (pairwise-json (mapcar (lambda (p)
+                                   (let ((pair (getf p :pair))
+                                         (compatible (getf p :compatible)))
+                                     (format nil "~%    {\"pair\": [[~A, ~A], [~A, ~A]], \"compatible\": ~A}"
+                                             (first (first pair))
+                                             (second (first pair))
+                                             (first (second pair))
+                                             (second (second pair))
+                                             (if compatible "true" "false"))))
+                                 pairwise)))
+      (format nil "{~%  \"status\": \"~A\",~%  \"contradiction\": ~A,~%  \"pairwise\": [~{~A~^,~}~%  ]~%}"
+              (string-downcase (string (getf overall :status)))
+              contradiction-str
+              pairwise-json))))
 
 (defun format-result-readable (result)
   "Format result in human-readable format"

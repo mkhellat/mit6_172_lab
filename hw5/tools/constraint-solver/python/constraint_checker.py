@@ -149,13 +149,37 @@ class ConstraintChecker:
                 finally:
                     os.unlink(temp_path)
             
-            # Parse output (JSON part is at the end)
+            # Parse output (JSON part is at the end, before ECL banner)
             output = process.stdout
-            # Extract JSON from output
-            json_start = output.rfind('{')
+            # Extract JSON from output - find the main JSON object
+            # Look for the pattern: newline followed by { and "status"
+            json_start = output.find('\n{\n  "status"')
+            if json_start == -1:
+                # Try alternative pattern
+                json_start = output.find('{\n  "status"')
+            if json_start == -1:
+                # Last resort: find any { followed by "status"
+                json_start = output.find('{"status"')
+            
             if json_start != -1:
-                json_str = output[json_start:]
-                return json.loads(json_str)
+                # Find the matching closing brace for the main object
+                brace_count = 0
+                json_end = json_start
+                for i in range(json_start, len(output)):
+                    if output[i] == '{':
+                        brace_count += 1
+                    elif output[i] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            json_end = i + 1
+                            break
+                
+                json_str = output[json_start:json_end]
+                try:
+                    return json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    # If JSON parsing fails, try readable format
+                    return self._parse_readable_output(output)
             else:
                 # Fallback: parse from readable format
                 return self._parse_readable_output(output)
