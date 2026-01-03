@@ -60,11 +60,26 @@ cd hw5/tools/constraint-solver
 python3 python/constraint_checker.py 4:80 10:42 64:9
 ```
 
-### With Plot Generation
+### Plot Generation
+
+**Note**: The `--plot` option is currently a placeholder. For now, use the
+existing plot generation scripts in `hw5/scripts/`:
 
 ```bash
-python3 python/constraint_checker.py 4:80 10:42 64:9 --plot plots/result.png
+# Generate main contradiction plot (Ben Bitdiddle's data)
+cd hw5
+python3 scripts/generate_contradiction_plot.py
+
+# Generate pairwise compatibility plots
+python3 scripts/generate_pairwise_plots.py
+
+# For Professor Karan's data
+python3 scripts/generate_contradiction_plot_karan.py
+python3 scripts/generate_pairwise_plots_karan.py
 ```
+
+The plots are saved to `hw5/plots/` directory. See the [Plot Generation](#plot-generation)
+section below for more details.
 
 ### JSON Output
 
@@ -221,9 +236,89 @@ The Python interface extracts JSON from LISP output by:
 3. Handling ECL banner output that appears after script execution
 4. Falling back to readable format parsing if JSON extraction fails
 
+## Plot Generation
+
+The constraint solver tool can check consistency, but plot generation is
+currently handled by dedicated scripts in `hw5/scripts/`. These scripts generate
+publication-quality plots showing:
+
+- Constraint lines (Work Law, Span Law, Greedy Scheduler Bound)
+- Feasible regions for each measurement
+- Contradictions (non-overlapping regions)
+- Pairwise compatibility analysis
+
+### Available Plot Scripts
+
+1. **Main Contradiction Plot** (`generate_contradiction_plot.py`):
+   - Shows all constraints and feasible regions
+   - Highlights contradictions
+   - For Ben Bitdiddle's measurements (4:80, 10:42, 64:9)
+
+2. **Pairwise Compatibility Plots** (`generate_pairwise_plots.py`):
+   - Generates three plots showing compatibility of each pair
+   - T₄ & T₁₀, T₄ & T₆₄, T₁₀ & T₆₄
+
+3. **Professor Karan's Plots**:
+   - `generate_contradiction_plot_karan.py`
+   - `generate_pairwise_plots_karan.py`
+   - For measurements (4:80, 10:42, 64:10)
+
+### Usage
+
+```bash
+cd hw5
+
+# Generate all plots for Ben Bitdiddle's data
+python3 scripts/generate_contradiction_plot.py
+python3 scripts/generate_pairwise_plots.py
+
+# Generate all plots for Professor Karan's data
+python3 scripts/generate_contradiction_plot_karan.py
+python3 scripts/generate_pairwise_plots_karan.py
+```
+
+Plots are saved to `hw5/plots/` directory:
+- `contradiction_plot.png` - Main contradiction visualization
+- `t4_t10_compatible.png` - T₄ and T₁₀ compatibility
+- `t4_t64_compatible.png` - T₄ and T₆₄ compatibility
+- `t10_t64_compatible.png` - T₁₀ and T₆₄ compatibility
+
+### Plot Features
+
+The plots show:
+- **Constraint Lines**: Work Law (vertical dashed), Span Law (horizontal dotted),
+  Greedy Scheduler Bound (diagonal solid)
+- **Feasible Regions**: Shaded areas where constraints are satisfied
+- **Contradictions**: Gaps or non-overlapping regions indicating inconsistency
+- **Annotations**: Clear labels and explanations
+
+### Customizing Plots
+
+To create plots for your own measurements, you can:
+1. Copy one of the existing scripts
+2. Modify the measurement values (P, TP)
+3. Adjust axis ranges if needed
+4. Update labels and titles
+
+Example template:
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Your measurements
+measurements = [(4, 80), (10, 42), (64, 9)]
+
+# Derive constraints
+for p, tp in measurements:
+    work_law = p * tp
+    span_law = tp
+    greedy_slope = -(p - 1)
+    # ... plot constraints
+```
+
 ## Integration with Existing Scripts
 
-The tool can be integrated with existing plot generation scripts in `hw5/scripts/`:
+The constraint checker can be used to validate measurements before generating plots:
 
 ```python
 from constraint_checker import ConstraintChecker
@@ -233,13 +328,14 @@ result = checker.check_measurements([(4, 80), (10, 42), (64, 9)])
 
 if result['status'] == 'inconsistent':
     print(f"Found contradiction: {result['contradiction']}")
-    # Generate detailed plot
-    checker.generate_plot([(4, 80), (10, 42), (64, 9)], 
-                         Path('plots/contradiction.png'))
+    # Now generate detailed plot using existing scripts
+    # python3 scripts/generate_contradiction_plot.py
 ```
 
 ## Future Enhancements
 
+- [ ] **Plot Generation Integration**: Implement `generate_plot()` function to
+  automatically generate constraint visualization plots from measurements
 - [ ] Web interface for interactive checking
 - [ ] Batch processing of multiple measurement sets
 - [ ] Export results to LaTeX/Markdown

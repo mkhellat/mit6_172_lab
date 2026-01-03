@@ -33,6 +33,28 @@ python3 python/constraint_checker.py 4:80 10:42 64:9
 
 This will tell you if Ben Bitdiddle's measurements are consistent (they're not!).
 
+## Generating Plots
+
+To visualize the constraints and contradictions, use the plot generation scripts:
+
+```bash
+cd hw5
+
+# Generate main contradiction plot
+python3 scripts/generate_contradiction_plot.py
+
+# Generate pairwise compatibility plots
+python3 scripts/generate_pairwise_plots.py
+```
+
+Plots are saved to `hw5/plots/` directory. The plots show:
+- Constraint lines (Work Law, Span Law, Greedy Scheduler Bound)
+- Feasible regions for each measurement
+- Contradictions (non-overlapping regions)
+
+**Note**: The `--plot` option in the constraint checker is currently a placeholder.
+Use the dedicated plot scripts in `hw5/scripts/` for now.
+
 ## What It Does
 
 The tool checks if parallel execution time measurements satisfy:

@@ -212,6 +212,11 @@ class ConstraintChecker:
         """
         Generate constraint visualization plot.
         
+        **Note**: This function is currently a placeholder. For plot generation,
+        use the dedicated scripts in hw5/scripts/:
+        - generate_contradiction_plot.py
+        - generate_pairwise_plots.py
+        
         Args:
             measurements: List of (processor_count, time) tuples.
             output_path: Path to save the plot.
@@ -219,15 +224,15 @@ class ConstraintChecker:
         
         Returns:
             Path to generated plot.
-        """
-        # This would integrate with existing plot generation code
-        # For now, we'll create a simple wrapper
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Import plot generation logic (can be refactored from existing scripts)
-        # For now, return a placeholder
-        return output_path
+        Raises:
+            NotImplementedError: Plot generation not yet implemented.
+        """
+        raise NotImplementedError(
+            "Plot generation is not yet implemented. "
+            "Please use the dedicated plot scripts in hw5/scripts/: "
+            "generate_contradiction_plot.py and generate_pairwise_plots.py"
+        )
 
 
 def main():
