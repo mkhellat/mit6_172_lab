@@ -66,6 +66,11 @@ This shows that while each pair is compatible, all three together create a contr
 - Check that `lisp/constraint-solver.lisp` exists
 - Try running ECL directly: `ecl -load lisp/constraint-solver.lisp`
 
+**Script hangs or doesn't exit (ECL)**
+- ECL doesn't automatically exit after loading scripts - it stays in the REPL
+- The Python interface automatically adds `(ext:quit)` to make ECL exit
+- If running ECL directly, add `(ext:quit)` at the end of your script
+
 **Import errors in Python**
 - Make sure you're running from the `constraint-solver` directory
 - Check that matplotlib and numpy are installed: `pip install matplotlib numpy`

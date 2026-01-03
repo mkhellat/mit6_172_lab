@@ -30,7 +30,10 @@ constraint-solver/
 You need one of the following Common Lisp implementations:
 - **SBCL** (Steel Bank Common Lisp) - Recommended
 - **CLISP** (GNU CLISP)
-- **ECL** (Embeddable Common Lisp)
+- **ECL** (Embeddable Common Lisp) - Supported with explicit exit
+
+**Note**: ECL requires an explicit `(ext:quit)` command to exit after script
+execution. The Python interface handles this automatically.
 
 Install on Arch Linux:
 ```bash
@@ -194,6 +197,29 @@ Check compatibility of all pairs of measurements.
 4. **Visualization**:
    - Generate plots showing feasible regions
    - Highlight contradictions
+
+## Implementation Details
+
+### LISP Implementation Compatibility
+
+The tool supports multiple Common Lisp implementations with automatic detection:
+
+- **SBCL**: Uses `--script` mode for non-interactive execution
+- **CLISP**: Executes script file directly
+- **ECL**: Uses `-load` mode with explicit `(ext:quit)` to prevent hanging
+
+**ECL Behavior**: ECL doesn't automatically exit after loading a script - it
+stays in the REPL waiting for input. The Python interface automatically adds
+`(ext:quit)` to the generated script to ensure proper exit. This prevents the
+test script from hanging indefinitely.
+
+### Output Parsing
+
+The Python interface extracts JSON from LISP output by:
+1. Finding the JSON object (looking for `"status"` field pattern)
+2. Matching braces to extract complete JSON object
+3. Handling ECL banner output that appears after script execution
+4. Falling back to readable format parsing if JSON extraction fails
 
 ## Integration with Existing Scripts
 

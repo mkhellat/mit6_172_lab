@@ -57,16 +57,28 @@ of both languages:
    - Formats for LISP: `'((4 80) (10 42) (64 9))`
 
 3. **LISP Processing**:
-   - Derives constraints for each measurement
+   - Python generates temporary LISP script with:
+     - `(load "constraint-solver.lisp")` to load the solver
+     - `(check-measurements ...)` to run the analysis
+     - `(format-result-readable ...)` and `(format-result-json ...)` for output
+     - `(ext:quit)` for ECL to exit (prevents hanging in REPL)
+   - LISP derives constraints for each measurement
    - Finds tightest span constraint
    - Evaluates greedy bounds
    - Checks for contradictions
    - Performs pairwise analysis
+   - Returns structured results
 
 4. **Result Formatting**:
-   - LISP returns structured data
+   - LISP returns structured data (human-readable + JSON)
+   - Python extracts JSON from output (handles ECL banner)
    - Python formats for display (human-readable or JSON)
    - Optionally generates plots
+
+**Note on ECL**: ECL doesn't automatically exit after loading a script - it
+stays in the REPL. The Python interface automatically adds `(ext:quit)` to the
+generated script to ensure ECL exits properly. This prevents the test script
+from hanging indefinitely.
 
 ## Constraint Derivation
 
