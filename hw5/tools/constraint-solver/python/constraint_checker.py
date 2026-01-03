@@ -210,29 +210,138 @@ class ConstraintChecker:
     def generate_plot(self, measurements: List[Tuple[int, float]], 
                      output_path: Path, title: str = "Constraint Analysis") -> Path:
         """
-        Generate constraint visualization plot.
+        Generate constraint visualization plot for any set of measurements.
         
-        **Note**: This function is currently a placeholder. For plot generation,
-        use the dedicated scripts in hw5/scripts/:
-        - generate_contradiction_plot.py
-        - generate_pairwise_plots.py
+        This function dynamically generates plots showing:
+        - Constraint lines (Work Law, Span Law, Greedy Scheduler Bound)
+        - Feasible regions for each measurement
+        - Contradictions (non-overlapping regions)
         
         Args:
             measurements: List of (processor_count, time) tuples.
+                         Example: [(4, 80), (10, 42), (64, 9)]
             output_path: Path to save the plot.
             title: Plot title.
         
         Returns:
             Path to generated plot.
-        
-        Raises:
-            NotImplementedError: Plot generation not yet implemented.
         """
-        raise NotImplementedError(
-            "Plot generation is not yet implemented. "
-            "Please use the dedicated plot scripts in hw5/scripts/: "
-            "generate_contradiction_plot.py and generate_pairwise_plots.py"
-        )
+        # First, check consistency to get constraint information
+        result = self.check_measurements(measurements)
+        
+        # Create output directory if needed
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Color palette for different measurements
+        colors = plt.cm.tab10(np.linspace(0, 1, len(measurements)))
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Derive constraints for each measurement
+        constraints = []
+        for (p, tp), color in zip(measurements, colors):
+            work_law = p * tp  # T1 <= P * TP
+            span_law = tp      # T∞ <= TP
+            # Greedy bound: T1 >= P * TP - (P-1) * T∞
+            constraints.append({
+                'p': p,
+                'tp': tp,
+                'work_law': work_law,
+                'span_law': span_law,
+                'color': color
+            })
+        
+        # Find tightest span constraint
+        tightest_span = min(c['span_law'] for c in constraints)
+        
+        # Determine axis ranges
+        max_work = max(c['work_law'] for c in constraints)
+        max_span = max(c['span_law'] for c in constraints)
+        
+        # T_infinity range for plotting
+        T_inf_range = np.linspace(0, min(max_span * 1.2, tightest_span * 3), 1000)
+        T_inf_constrained = np.linspace(0, tightest_span, 1000)
+        
+        # Plot constraint lines for each measurement
+        for i, c in enumerate(constraints):
+            p, tp = c['p'], c['tp']
+            color = c['color']
+            work_law = c['work_law']
+            
+            # Work Law: vertical line at T1 = P * TP
+            ax.axvline(x=work_law, color=color, linestyle='--', 
+                      linewidth=2, alpha=0.7, 
+                      label=f'T_{p} Work Law: T₁ ≤ {work_law:.0f}')
+            
+            # Span Law: horizontal line at T∞ = TP
+            ax.axhline(y=tp, color=color, linestyle=':', 
+                      linewidth=2 if tp == tightest_span else 1.5,
+                      alpha=0.7,
+                      label=f'T_{p} Span Law: T∞ ≤ {tp:.1f}' + 
+                            (' (tightest)' if tp == tightest_span else ''))
+            
+            # Greedy Scheduler Bound: T1 = P * TP - (P-1) * T∞
+            greedy_bound = work_law - (p - 1) * T_inf_range
+            ax.plot(greedy_bound, T_inf_range, color=color, 
+                   linewidth=2, alpha=0.8,
+                   label=f'T_{p} Greedy Bound: T₁ ≥ {work_law:.0f} - {p-1}T∞')
+            
+            # Feasible region when T∞ <= tightest_span
+            greedy_at_tightest = work_law - (p - 1) * T_inf_constrained
+            work_law_array = np.full_like(T_inf_constrained, work_law)
+            
+            # Only fill if feasible
+            feasible_low = greedy_at_tightest
+            feasible_high = work_law_array
+            
+            ax.fill_betweenx(T_inf_constrained, feasible_low, feasible_high,
+                           where=(feasible_low <= feasible_high),
+                           alpha=0.2, color=color,
+                           label=f'T_{p} Feasible Region (T∞ ≤ {tightest_span:.1f})')
+        
+        # Check for contradiction and highlight it
+        if result.get('status') == 'inconsistent':
+            contradiction = result.get('contradiction', '')
+            # Try to extract min and max T1 from contradiction string
+            import re
+            match = re.search(r'([\d.]+)\s*<=\s*T1\s*<=\s*([\d.]+)', contradiction)
+            if match:
+                min_t1 = float(match.group(1))
+                max_t1 = float(match.group(2))
+                
+                # Highlight the contradiction
+                ax.axvline(x=min_t1, color='red', linestyle='--', 
+                         linewidth=2, alpha=0.7)
+                ax.axvline(x=max_t1, color='red', linestyle='--', 
+                         linewidth=2, alpha=0.7)
+                
+                # Add contradiction annotation
+                mid_t1 = (min_t1 + max_t1) / 2
+                ax.text(mid_t1, tightest_span / 2,
+                       f'NO OVERLAP!\nContradiction:\n{min_t1:.0f} <= T1 <= {max_t1:.0f}',
+                       bbox=dict(boxstyle='round', facecolor='red', 
+                               alpha=0.7, edgecolor='black'),
+                       fontsize=12, ha='center', color='white', weight='bold')
+        
+        # Labels and title
+        ax.set_xlabel('T₁ (Work)', fontsize=14)
+        ax.set_ylabel('T∞ (Span)', fontsize=14)
+        ax.set_title(f'{title}\nFeasible Regions in (T₁, T∞) Space', 
+                    fontsize=16, weight='bold')
+        ax.legend(loc='upper right', fontsize=9, ncol=1)
+        ax.grid(True, alpha=0.3)
+        
+        # Set axis limits with some padding
+        ax.set_xlim(0, max_work * 1.1)
+        ax.set_ylim(0, min(max_span * 1.2, tightest_span * 3))
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        return output_path
 
 
 def main():
@@ -278,8 +387,13 @@ def main():
     
     # Generate plot if requested
     if args.plot:
-        checker.generate_plot(measurements, args.plot)
-        print(f"\nPlot saved to {args.plot}")
+        try:
+            plot_path = checker.generate_plot(measurements, args.plot, 
+                                            title="Constraint Analysis")
+            print(f"\nPlot saved to {plot_path}")
+        except Exception as e:
+            print(f"\nError generating plot: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == '__main__':

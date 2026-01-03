@@ -60,25 +60,20 @@ cd hw5/tools/constraint-solver
 python3 python/constraint_checker.py 4:80 10:42 64:9
 ```
 
-### Plot Generation
+### With Plot Generation
 
-**Note**: The `--plot` option is currently a placeholder. For now, use the
-existing plot generation scripts in `hw5/scripts/`:
+Generate constraint visualization plots for any set of measurements:
 
 ```bash
-# Generate main contradiction plot (Ben Bitdiddle's data)
-cd hw5
-python3 scripts/generate_contradiction_plot.py
-
-# Generate pairwise compatibility plots
-python3 scripts/generate_pairwise_plots.py
-
-# For Professor Karan's data
-python3 scripts/generate_contradiction_plot_karan.py
-python3 scripts/generate_pairwise_plots_karan.py
+python3 python/constraint_checker.py 4:80 10:42 64:9 --plot plots/result.png
 ```
 
-The plots are saved to `hw5/plots/` directory. See the [Plot Generation](#plot-generation)
+The tool automatically generates plots showing:
+- Constraint lines (Work Law, Span Law, Greedy Scheduler Bound)
+- Feasible regions for each measurement
+- Contradictions (non-overlapping regions) when detected
+
+Plots are saved to the specified path. See the [Plot Generation](#plot-generation)
 section below for more details.
 
 ### JSON Output
@@ -238,83 +233,72 @@ The Python interface extracts JSON from LISP output by:
 
 ## Plot Generation
 
-The constraint solver tool can check consistency, but plot generation is
-currently handled by dedicated scripts in `hw5/scripts/`. These scripts generate
-publication-quality plots showing:
-
-- Constraint lines (Work Law, Span Law, Greedy Scheduler Bound)
-- Feasible regions for each measurement
-- Contradictions (non-overlapping regions)
-- Pairwise compatibility analysis
-
-### Available Plot Scripts
-
-1. **Main Contradiction Plot** (`generate_contradiction_plot.py`):
-   - Shows all constraints and feasible regions
-   - Highlights contradictions
-   - For Ben Bitdiddle's measurements (4:80, 10:42, 64:9)
-
-2. **Pairwise Compatibility Plots** (`generate_pairwise_plots.py`):
-   - Generates three plots showing compatibility of each pair
-   - T₄ & T₁₀, T₄ & T₆₄, T₁₀ & T₆₄
-
-3. **Professor Karan's Plots**:
-   - `generate_contradiction_plot_karan.py`
-   - `generate_pairwise_plots_karan.py`
-   - For measurements (4:80, 10:42, 64:10)
-
-### Usage
+The constraint solver tool includes **general-purpose plot generation** that works
+for **any set of measurements**. Simply use the `--plot` option:
 
 ```bash
-cd hw5
-
-# Generate all plots for Ben Bitdiddle's data
-python3 scripts/generate_contradiction_plot.py
-python3 scripts/generate_pairwise_plots.py
-
-# Generate all plots for Professor Karan's data
-python3 scripts/generate_contradiction_plot_karan.py
-python3 scripts/generate_pairwise_plots_karan.py
+python3 python/constraint_checker.py 4:80 10:42 64:9 --plot plots/result.png
 ```
 
-Plots are saved to `hw5/plots/` directory:
-- `contradiction_plot.png` - Main contradiction visualization
-- `t4_t10_compatible.png` - T₄ and T₁₀ compatibility
-- `t4_t64_compatible.png` - T₄ and T₆₄ compatibility
-- `t10_t64_compatible.png` - T₁₀ and T₆₄ compatibility
+### Features
 
-### Plot Features
+The automatically generated plots show:
 
-The plots show:
-- **Constraint Lines**: Work Law (vertical dashed), Span Law (horizontal dotted),
-  Greedy Scheduler Bound (diagonal solid)
-- **Feasible Regions**: Shaded areas where constraints are satisfied
-- **Contradictions**: Gaps or non-overlapping regions indicating inconsistency
-- **Annotations**: Clear labels and explanations
+- **Constraint Lines**:
+  - **Work Law**: Vertical dashed lines (T₁ ≤ P × TP)
+  - **Span Law**: Horizontal dotted lines (T∞ ≤ TP)
+  - **Greedy Scheduler Bound**: Diagonal solid lines (T₁ ≥ P × TP - (P-1) × T∞)
+  
+- **Feasible Regions**: Shaded areas where all constraints are satisfied for each
+  measurement (when T∞ ≤ tightest span constraint)
 
-### Customizing Plots
+- **Contradictions**: Automatically detected and highlighted when measurements are
+  inconsistent:
+  - Red vertical lines marking the impossible T₁ range
+  - Red annotation box explaining the contradiction
 
-To create plots for your own measurements, you can:
-1. Copy one of the existing scripts
-2. Modify the measurement values (P, TP)
-3. Adjust axis ranges if needed
-4. Update labels and titles
+- **Automatic Formatting**:
+  - Color-coded by measurement (each measurement gets a unique color)
+  - Tightest span constraint marked with "(tightest)" label
+  - Optimal axis ranges automatically determined
+  - Publication-quality output (300 DPI)
 
-Example template:
-```python
-import matplotlib.pyplot as plt
-import numpy as np
+### Examples
 
-# Your measurements
-measurements = [(4, 80), (10, 42), (64, 9)]
-
-# Derive constraints
-for p, tp in measurements:
-    work_law = p * tp
-    span_law = tp
-    greedy_slope = -(p - 1)
-    # ... plot constraints
+**Inconsistent measurements** (contradiction detected):
+```bash
+python3 python/constraint_checker.py 4:80 10:42 64:9 --plot plots/inconsistent.png
 ```
+The plot will show non-overlapping feasible regions and highlight the contradiction.
+
+**Consistent measurements**:
+```bash
+python3 python/constraint_checker.py 4:100 64:10 --plot plots/consistent.png
+```
+The plot will show overlapping feasible regions indicating consistency.
+
+**Any number of measurements**:
+```bash
+python3 python/constraint_checker.py 2:50 4:30 8:20 16:15 --plot plots/multi.png
+```
+Works with 2, 3, 4, or more measurements.
+
+### Plot Output
+
+- **Format**: PNG (300 DPI, publication quality)
+- **Size**: 12×8 inches (optimized for viewing and printing)
+- **Location**: Specified by `--plot` argument (directory created if needed)
+
+### Legacy Scripts
+
+The dedicated scripts in `hw5/scripts/` are still available for reference:
+- `generate_contradiction_plot.py` - Ben Bitdiddle's data
+- `generate_pairwise_plots.py` - Pairwise compatibility for Ben's data
+- `generate_contradiction_plot_karan.py` - Professor Karan's data
+- `generate_pairwise_plots_karan.py` - Pairwise compatibility for Karan's data
+
+These scripts are hardcoded for specific measurements. The `--plot` option in the
+constraint checker works for **any measurements** and is the recommended approach.
 
 ## Integration with Existing Scripts
 
@@ -334,14 +318,14 @@ if result['status'] == 'inconsistent':
 
 ## Future Enhancements
 
-- [ ] **Plot Generation Integration**: Implement `generate_plot()` function to
-  automatically generate constraint visualization plots from measurements
+- [ ] **Pairwise Plot Generation**: Generate separate plots for each pair of
+  measurements (like the existing pairwise scripts)
 - [ ] Web interface for interactive checking
 - [ ] Batch processing of multiple measurement sets
 - [ ] Export results to LaTeX/Markdown
 - [ ] Integration with Jupyter notebooks
 - [ ] Parallelism bounds calculation (from write-up 2)
-- [ ] Automatic plot generation with optimal axis ranges
+- [ ] Interactive plots (Plotly) for web interface
 
 ## License
 
