@@ -7,10 +7,10 @@
 
 ## Problem Statement
 
-Give pseudocode for an efficient multithreaded algorithm that transposes an
-$n \times n$ matrix in place by using divide-and-conquer and no parallel for
-loops to divide the matrix recursively into four $n/2 \times n/2$ submatrices.
-Analyze your algorithm.
+Give pseudocode for an efficient multithreaded algorithm that
+transposes an $n \times n$ matrix in place by using divide-and-conquer
+and no parallel for loops to divide the matrix recursively into four
+$n/2 \times n/2$ submatrices.  Analyze your algorithm.
 
 ---
 
@@ -26,12 +26,12 @@ For an $n \times n$ matrix $A$, we divide it into four quadrants:
 - **Bottom-right (BR)**: rows $[n/2, n-1]$, columns $[n/2, n-1]$
 
 When transposing a matrix:
-- The top-left quadrant transposes in place (becomes the top-left of the
-  transposed matrix)
-- The bottom-right quadrant transposes in place (becomes the bottom-right of
+- The top-left quadrant transposes in place (becomes the top-left of
   the transposed matrix)
-- The top-right and bottom-left quadrants swap positions, and each must be
-  transposed
+- The bottom-right quadrant transposes in place (becomes the
+  bottom-right of the transposed matrix)
+- The top-right and bottom-left quadrants swap positions, and each
+  must be transposed
 
 ### Recursive Structure
 
@@ -40,7 +40,8 @@ When transposing a matrix:
    - Recursively transpose the top-left quadrant
    - Recursively transpose the bottom-right quadrant
    - Swap the top-right and bottom-left quadrants
-   - Recursively transpose the swapped quadrants (each in its new position)
+   - Recursively transpose the swapped quadrants (each in its new
+     position)
 
 ### Parallelization
 
@@ -62,7 +63,7 @@ TRANSPOSE(A, row, col, n)
     half = n / 2
     
     // Recursively transpose quadrants that stay in place
-    spawn TRANSPOSE(A, row, col, half)              // Top-left
+    spawn TRANSPOSE(A, row, col, half)               // Top-left
     spawn TRANSPOSE(A, row + half, col + half, half) // Bottom-right
     sync
     
@@ -71,7 +72,7 @@ TRANSPOSE(A, row, col, n)
     sync
     
     // Recursively transpose the swapped quadrants
-    spawn TRANSPOSE(A, row, col + half, half)       // Was bottom-left
+    spawn TRANSPOSE(A, row, col + half, half)        // Was bottom-left
     spawn TRANSPOSE(A, row + half, col, half)        // Was top-right
     sync
 
@@ -119,14 +120,9 @@ Using the master theorem with $a = 4$, $b = 2$, $f(n) = \Theta(n^2)$:
 - Since $f(n) = \Theta(n^2) = \Theta(n^{\log_b a})$, we are in case 2
 - $T_1(n) = \Theta(n^2 \log n)$
 
-**Wait, let's reconsider**: The swap operation swaps $n^2/4$ elements, which is
-$\Theta(n^2)$. But we can optimize the swap to be done in parallel during the
-recursive calls. However, for work analysis, we still need to account for all
-the element swaps.
-
-Actually, let's think more carefully. The swap operation needs to swap $n^2/4$
-pairs of elements. In the serial case, this is $\Theta(n^2)$. But we can
-parallelize it recursively.
+**Wait, what if swap is done recursively?**: The swap operation needs
+to swap $n^2/4$ pairs of elements. In the serial case, this is
+$\Theta(n^2)$. But we can parallelize it recursively.
 
 Let $S_1(n)$ be the work for swapping two $n \times n$ quadrants:
 - Base case: $S_1(1) = \Theta(1)$ (swap one element)
@@ -140,27 +136,14 @@ $$
 
 This gives $T_1(n) = \Theta(n^2 \log n)$.
 
-However, we can optimize: instead of doing a separate swap, we can combine the
-swap and transpose operations. But for the standard approach, the work is
-$\Theta(n^2 \log n)$.
+**Could we optimize more?** we swap and transpose in one step. But the
+problem asks for divide-and-conquer with four submatrices.
 
-Actually, let me reconsider the algorithm. A simpler approach: we swap and
-transpose in one step. But the problem asks for divide-and-conquer with four
-submatrices.
-
-Let me refine: The swap of two $n/2 \times n/2$ quadrants requires swapping
-$n^2/4$ elements. This is $\Theta(n^2)$ work. So:
-
-$$
-T_1(n) = 4T_1(n/2) + \Theta(n^2)
-$$
-
-By master theorem: $T_1(n) = \Theta(n^2 \log n)$.
 
 ### Span Analysis
 
-Let $T_{\infty}(n)$ be the span (critical path length) for transposing an $n
-\times n$ matrix.
+Let $T_{\infty}(n)$ be the span (critical path length) for transposing
+an $n \times n$ matrix.
 
 **Base case**: $T_{\infty}(1) = \Theta(1)$
 
@@ -183,39 +166,158 @@ $$
 T_{\infty}(n) = T_{\infty}(n/2) + S_{\infty}(n) + T_{\infty}(n/2) = 2T_{\infty}(n/2) + \Theta(\log n)
 $$
 
-Solving this recurrence:
+### Master Theorem Analysis
+
+This recurrence is of the form $T(n) = aT(n/b) + f(n)$ where:
+- $a = 2$
+- $b = 2$
+- $f(n) = \Theta(\log n)$
+
+For the Master Theorem, we compute:
+- $n^{\log_b a} = n^{\log_2 2} = n^1 = n$
+
+Now we compare $f(n) = \Theta(\log n)$ with $n^{\log_b a} = n$:
+- Since $\log n = o(n)$, we have $\log n = O(n^{1-\epsilon})$ for any $\epsilon > 0$ (e.g., $\epsilon = 0.5$ gives $O(n^{0.5})$)
+
+**Master Theorem Case 1** states: If $f(n) = O(n^{\log_b a - \epsilon})$ for some $\epsilon > 0$, then $T(n) = \Theta(n^{\log_b a}) = \Theta(n)$.
+
+Since $\log n = O(n^{1-\epsilon})$ for any $\epsilon > 0$ (e.g., $\epsilon = 0.5$), **Case 1 applies directly**, giving us:
+$$
+T_{\infty}(n) = \Theta(n)
+$$
+
+The Master Theorem correctly predicts the solution! The explicit calculation below confirms this result and provides insight into why the $\log n$ terms don't accumulate to $\Theta(n \log n)$ as might be initially expected.
+
+### Explicit Solution with Rigorous Proof
+
+We solve the recurrence:
 $$
 T_{\infty}(n) = 2T_{\infty}(n/2) + c \log n
 $$
 
-for some constant $c$. Expanding:
+for some constant $c > 0$. Expanding recursively:
 $$
 T_{\infty}(n) = 2^k T_{\infty}(n/2^k) + c \sum_{i=0}^{k-1} 2^i \log(n/2^i)
 $$
 
-Setting $k = \log_2 n$:
+Setting $k = \log_2 n$ (assuming $n$ is a power of 2 for simplicity):
 $$
 T_{\infty}(n) = n \cdot T_{\infty}(1) + c \sum_{i=0}^{\log_2 n - 1} 2^i (\log_2 n - i)
 $$
 
-The sum $\sum_{i=0}^{\log_2 n - 1} 2^i (\log_2 n - i)$:
-- The term $2^i \log_2 n$ contributes approximately $(n-1) \log_2 n$
-- The term $-i \cdot 2^i$ contributes approximately $O(n)$
-- Therefore, the sum is $\Theta(n \log n)$
+Since $T_{\infty}(1) = \Theta(1)$, we have $n \cdot T_{\infty}(1) = \Theta(n)$. Now we need to rigorously evaluate the sum:
 
-So:
 $$
-T_{\infty}(n) = \Theta(n) + \Theta(n \log n) = \Theta(n \log n)
+S(n) = \sum_{i=0}^{\log_2 n - 1} 2^i (\log_2 n - i)
 $$
+
+**Step 1: Split the sum**
+
+$$
+S(n) = \sum_{i=0}^{k-1} 2^i (\log_2 n - i) = \log_2 n \sum_{i=0}^{k-1} 2^i - \sum_{i=0}^{k-1} i \cdot 2^i
+$$
+
+where $k = \log_2 n$.
+
+**Step 2: Evaluate the first sum**
+
+$$
+\sum_{i=0}^{k-1} 2^i = 2^k - 1 = n - 1
+$$
+
+Therefore:
+$$
+\log_2 n \sum_{i=0}^{k-1} 2^i = \log_2 n (n - 1) = n \log_2 n - \log_2 n
+$$
+
+**Step 3: Evaluate the second sum**
+
+We use the known formula for $\sum_{i=0}^{k-1} i \cdot 2^i$:
+
+**Lemma**: For $k \geq 1$, $\sum_{i=0}^{k-1} i \cdot 2^i = (k-2)2^k + 2$.
+
+**Proof of Lemma** (by induction):
+- **Base case** ($k=1$): $\sum_{i=0}^{0} i \cdot 2^i = 0 = (1-2)2^1 + 2 = -2 + 2 = 0$ ✓
+- **Inductive step**: Assume true for $k$, prove for $k+1$:
+  $$
+  \sum_{i=0}^{k} i \cdot 2^i = \sum_{i=0}^{k-1} i \cdot 2^i + k \cdot 2^k = (k-2)2^k + 2 + k \cdot 2^k = (2k-2)2^k + 2 = (k-1)2^{k+1} + 2
+  $$
+  This equals $((k+1)-2)2^{k+1} + 2$ ✓
+
+Applying the lemma with $k = \log_2 n$:
+$$
+\sum_{i=0}^{k-1} i \cdot 2^i = (k-2)2^k + 2 = (\log_2 n - 2)n + 2 = n \log_2 n - 2n + 2
+$$
+
+**Step 4: Combine the results**
+
+$$
+\begin{align}
+S(n) &= (n \log_2 n - \log_2 n) - (n \log_2 n - 2n + 2) \\
+     &= n \log_2 n - \log_2 n - n \log_2 n + 2n - 2 \\
+     &= 2n - \log_2 n - 2
+\end{align}
+$$
+
+**Step 5: Establish tight $\Theta$ bounds**
+
+We have $S(n) = 2n - \log_2 n - 2$. To prove $S(n) = \Theta(n)$, we need to show there exist positive constants $c_1, c_2$ and $n_0$ such that for all $n \geq n_0$:
+
+$$c_1 n \leq S(n) \leq c_2 n$$
+
+**Lower bound**: For $n \geq 4$:
+$$
+S(n) = 2n - \log_2 n - 2 \geq 2n - \frac{n}{2} - 2 = \frac{3n}{2} - 2
+$$
+
+For $n \geq 4$, we have $\frac{3n}{2} - 2 \geq n$ (since $\frac{3n}{2} - 2 \geq n$ implies $\frac{n}{2} \geq 2$, which holds for $n \geq 4$). Therefore:
+$$
+S(n) \geq n \quad \text{for } n \geq 4
+$$
+
+**Upper bound**: For all $n \geq 2$:
+$$
+S(n) = 2n - \log_2 n - 2 \leq 2n
+$$
+
+**Combining bounds**: For $n \geq 4$:
+$$
+n \leq S(n) \leq 2n
+$$
+
+This proves that $S(n) = \Theta(n)$ with constants $c_1 = 1$ and $c_2 = 2$.
+
+**Step 6: Final result**
+
+$$
+\begin{align}
+T_{\infty}(n) &= n \cdot T_{\infty}(1) + c \cdot S(n) \\
+               &= \Theta(n) + c \cdot \Theta(n) \\
+               &= \Theta(n)
+\end{align}
+$$
+
+**Confirmation**: This rigorous explicit calculation confirms the Master Theorem result: $T_{\infty}(n) = \Theta(n)$.
+
+The key insight revealed by the explicit calculation is *why* the Master Theorem works: while each level contributes $\Theta(\log n)$ work, the geometric series structure causes the $\log n$ factors to nearly cancel when summed across all $\log_2 n$ levels. Specifically:
+- The term $\sum_{i=0}^{k-1} 2^i \log_2 n = n \log_2 n - \log_2 n$ contributes $\Theta(n \log n)$
+- The term $\sum_{i=0}^{k-1} i \cdot 2^i = n \log_2 n - 2n + 2$ also contributes $\Theta(n \log n)$
+- Their difference yields only $\Theta(n)$
+
+This explicit calculation provides intuition for why the Master Theorem's Case 1 correctly predicts $\Theta(n)$: the logarithmic terms accumulate in a way that their total contribution is dominated by the recursive structure, not by the sum of the logarithms.
+</think>
+Re-evaluating the sum with exact bounds:
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+read_file
 
 ### Parallelism
 
 The parallelism is:
 $$
-\frac{T_1(n)}{T_{\infty}(n)} = \frac{\Theta(n^2 \log n)}{\Theta(n \log n)} = \Theta(n)
+\frac{T_1(n)}{T_{\infty}(n)} = \frac{\Theta(n^2 \log n)}{\Theta(n)} = \Theta(n \log n)
 $$
 
-This shows good parallelism that scales linearly with the matrix size.
+This shows excellent parallelism that scales super-linearly with the matrix size. The parallelism of $\Theta(n \log n)$ means the algorithm can effectively utilize a large number of processors, making it highly efficient for parallel execution.
 
 ---
 
@@ -224,12 +326,16 @@ This shows good parallelism that scales linearly with the matrix size.
 The divide-and-conquer matrix transpose algorithm:
 
 - **Work**: $T_1(n) = \Theta(n^2 \log n)$
-- **Span**: $T_{\infty}(n) = \Theta(n \log n)$
-- **Parallelism**: $\Theta(n)$
+- **Span**: $T_{\infty}(n) = \Theta(n)$ (as rigorously proven above)
+- **Parallelism**: $\Theta(n \log n)$
 
 The algorithm efficiently parallelizes the matrix transpose operation by
 recursively dividing the matrix into four quadrants and processing them in
 parallel. The work is slightly higher than the optimal $\Theta(n^2)$ due to the
-recursive overhead, but the algorithm achieves good parallelism of $\Theta(n)$,
-making it efficient for parallel execution on multiple processors.
+recursive overhead, but the algorithm achieves excellent parallelism of
+$\Theta(n \log n)$, making it highly efficient for parallel execution on
+multiple processors. The span analysis reveals an interesting mathematical
+phenomenon where the $\Theta(\log n)$ terms at each level accumulate in a way
+that yields only $\Theta(n)$ total span, not $\Theta(n \log n)$ as might be
+initially expected.
 
